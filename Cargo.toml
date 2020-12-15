@@ -1,0 +1,5 @@
+[workspace]
+members = [
+    "wartid-server",
+    "wartid-server-discord-bot",
+]

@@ -1,0 +1,16 @@
+@use crate::model::Menu;
+@use crate::templates::base_raw;
+@use crate::templates::menu;
+
+@(title: &str, menu_context: &Menu, content: Content)
+
+@:base_raw(title, {
+<link rel="stylesheet" href="/static/index.css"/>
+}, {
+<aside>
+@:menu(menu_context)
+</aside>
+<main>
+    @:content()
+</main>
+})

@@ -1,5 +1,8 @@
 /target
 Cargo.lock
+Rocket.toml
+discord_jwt.key
 
-/.idea
+*.env
+.idea
 *.iml

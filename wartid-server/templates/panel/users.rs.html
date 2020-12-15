@@ -1,0 +1,9 @@
+@use crate::model::Menu;
+@use crate::model::User;
+@use crate::templates::base;
+
+@(menu_context: &Menu, username: &str, user: User)
+
+@:base(username, menu_context, {
+<h4>@username</h4>
+})

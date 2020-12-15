@@ -1,0 +1,29 @@
+* {
+    margin: 0;
+}
+
+html, body {
+    height: 100%;
+}
+
+body {
+    display: flex;
+    flex-direction: row;
+
+    background: #ece9d8;
+}
+
+body > aside {
+    position: fixed;
+
+    margin: 8px;
+    width: calc(20vw - 16px);
+    height: calc(100% - 16px);
+}
+
+body > main {
+    margin: 2em;
+    margin-left: 20vw;
+    width: 80%;
+    height: calc(100% - 4em);
+}

@@ -1,0 +1,28 @@
+@use crate::model::Menu;
+
+@(menu_context: &Menu)
+
+<ul class="tree-view">
+    <li>Accueil</li>
+    <li>
+        <details open>
+            <summary>Comptes</summary>
+            <ul>
+                @for (user_id, user_name) in &menu_context.users {
+                    <li><a href="/@@@user_id">@user_name</a></li>
+                }
+            </ul>
+        </details>
+    </li>
+    <li>
+        <details>
+            <summary>WartApps</summary>
+            <ul>
+                <li><a href="https://wp-corp.eu.org/">CodiMD edgar.bzh</a></li>
+                <li>+</li>
+            </ul>
+        </details>
+    </li>
+</ul>
+
+<form action="/logout" method="post" style="margin-top: 1em;"><input type="submit" value="Déconnexion"></form>
