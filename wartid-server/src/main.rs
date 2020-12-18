@@ -7,14 +7,8 @@ extern crate rocket;
 #[macro_use]
 extern crate rocket_contrib;
 
-#[macro_use]
-mod ructe;
-mod model;
-mod schema;
+use std::path::{Path, PathBuf};
 
-use crate::model::WartIDError;
-use crate::ructe::Ructe;
-use crate::schema::sessions::dsl::sessions;
 use diesel::prelude::*;
 use rocket::config::{ConfigBuilder, Environment};
 use rocket::fairing::Info;
@@ -26,8 +20,17 @@ use rocket::request::{
 use rocket::response::status::NotFound;
 use rocket::response::{NamedFile, Redirect};
 use rocket::{Request, Rocket};
-use std::path::{Path, PathBuf};
 use uuid::Uuid;
+
+use crate::model::{WartIDError, WartIDResult};
+use crate::ructe::Ructe;
+use crate::schema::sessions::dsl::sessions;
+
+#[macro_use]
+mod ructe;
+mod model;
+mod routes;
+mod schema;
 
 impl<'r> rocket::response::Responder<'r> for WartIDError {
     fn respond_to(self, request: &Request) -> rocket::response::Result<'r> {
@@ -120,10 +123,18 @@ fn static_file(file: PathBuf) -> Result<NamedFile, NotFound<String>> {
 }
 
 #[get("/")]
-fn hello() -> &'static str {
-    r#"
-    Bonjour et bienvenue sur WartID
-    "#
+fn root(session: Option<LoginSession>) -> Redirect {
+    if session.is_some() {
+        Redirect::to("/home")
+    } else {
+        Redirect::to("/login")
+    }
+}
+
+#[get("/home")]
+fn home(_session: LoginSession, db: DbConn) -> WartIDResult<Ructe> {
+    let menu = model::Menu::build(&db)?;
+    Ok(render!(panel::home(&menu)))
 }
 
 struct UserIdParam<'a>(&'a str);
@@ -347,6 +358,7 @@ fn main() {
         model::discord_login_init();
     }
 
+    // TODO load database settings from environment variable into a virtual Rocket config
     // let db_conn = DbConn::fairing();
 
     /*let config = {
@@ -360,7 +372,9 @@ fn main() {
             "/",
             routes![
                 static_file,
-                hello,
+                root,
+                home,
+                routes::apps::list,
                 user_view,
                 user_view_me,
                 login,

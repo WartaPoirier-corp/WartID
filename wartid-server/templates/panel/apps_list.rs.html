@@ -1,0 +1,40 @@
+@use crate::model::Menu;
+@use crate::templates::base;
+
+@(menu_context: &Menu)
+
+@:base("WartApps", menu_context, {
+<form action="/apps/new">
+    <button id="new" class="target-button">Nouvelle WartApp</button>
+</form>
+
+<div class="table-container">
+    <table>
+        <thead>
+        <tr>
+            <th><span>App ID</span> <span class="handle" aria-hidden="true"></span></th>
+            <th><span>Nom</span> <span class="handle" aria-hidden="true"></span></th>
+            <th><span>Description</span> <span class="handle" aria-hidden="true"></span></th>
+            <th><span>Géré par</span><span class="handle" aria-hidden="true"></span></th>
+            <th></th>
+        </tr>
+        </thead>
+        <tbody>
+        <tr>
+            <td>1</td>
+            <td>WartaMD</td>
+            <td>Instance CodiMD</td>
+            <td>Edgar</td>
+            <td></td>
+        </tr>
+        <tr class="selected">
+            <td>2</td>
+            <td>shef.top</td>
+            <td>la cuisine miam</td>
+            <td>Johan, Edgar</td>
+            <td></td>
+        </tr>
+        </tbody>
+    </table>
+</div>
+})

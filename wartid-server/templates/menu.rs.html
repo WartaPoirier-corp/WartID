@@ -3,7 +3,7 @@
 @(menu_context: &Menu)
 
 <ul class="tree-view">
-    <li>Accueil</li>
+    <li><a href="/home">Accueil</a></li>
     <li>
         <details open>
             <summary>Comptes</summary>
@@ -19,10 +19,12 @@
             <summary>WartApps</summary>
             <ul>
                 <li><a href="https://wp-corp.eu.org/">CodiMD edgar.bzh</a></li>
-                <li>+</li>
+                <li><a href="/apps#new">+</a></li>
             </ul>
         </details>
     </li>
 </ul>
 
-<form action="/logout" method="post" style="margin-top: 1em;"><input type="submit" value="Déconnexion"></form>
+<form action="/logout" method="post" style="margin-top: 1em;">
+    <button>Déconnexion</button>
+</form>

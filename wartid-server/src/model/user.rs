@@ -1,6 +1,12 @@
-use super::*;
 use diesel::{BoolExpressionMethods, ExpressionMethods, QueryDsl, RunQueryDsl};
 use uuid::Uuid;
+
+#[cfg(feature = "discord_bot")]
+pub use discord_login::{destroy as discord_login_destroy, init as discord_login_init};
+
+use crate::schema::users;
+
+use super::*;
 
 #[derive(Debug, Queryable)]
 pub struct User {
@@ -98,8 +104,6 @@ impl User {
     }
 }
 
-use crate::schema::users;
-
 #[derive(Insertable)]
 #[table_name = "users"]
 struct NewUser {
@@ -134,6 +138,7 @@ mod discord_login {
     pub fn destroy() {
         std::fs::remove_file(KEY_FILE).expect("cannot remove key file");
         println!("Removed discord bot JWT key file");
+        std::process::exit(0)
     }
 
     #[derive(serde::Deserialize, serde::Serialize)]
@@ -159,6 +164,3 @@ mod discord_login {
         .map(|data: TokenData<Claims>| (data.claims.sub, data.claims.name))
     }
 }
-
-#[cfg(feature = "discord_bot")]
-pub use discord_login::{destroy as discord_login_destroy, init as discord_login_init};

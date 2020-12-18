@@ -1,0 +1,16 @@
+@use crate::model::Menu;
+@use crate::templates::base;
+
+@(menu_context: &Menu)
+
+@:base("Accueil", menu_context, {
+<p>
+    Bienvenue sur WartID, le portail de connection de la WPcorp. Il n'y a pas grand chose à faire ici si ce n'est créer,
+    configurer et administrer vos WartApps existantes.
+</p>
+<p>
+    Les WartApps sont des applications OAuth, c-a-d des services utilisant l'authentification WartID pour donner accès à
+    du contenu. Si vous souhaitez permettre l'authentification à un service au travers de WartID, allez donc
+    <a href="/apps#new">créer une WartApp</a> !
+</p>
+})

@@ -1,13 +1,16 @@
-mod menu;
-mod session;
-mod user;
-
 use std::fmt::Debug;
 
 use diesel::result::Error;
+
+pub use app::*;
 pub use menu::*;
 pub use session::*;
 pub use user::*;
+
+mod app;
+mod menu;
+mod session;
+mod user;
 
 pub type WartIDResult<T> = Result<T, WartIDError>;
 
