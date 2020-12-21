@@ -1,10 +1,9 @@
 #[macro_use]
 extern crate async_trait;
 
-use chrono::{DateTime, Duration, Utc};
-use jsonwebtoken::{DecodingKey, EncodingKey, Header, TokenData, Validation};
+use chrono::{Duration, Utc};
+use jsonwebtoken::{EncodingKey, Header};
 use serenity::framework::StandardFramework;
-use serenity::futures::io::Error;
 use serenity::http::Typing;
 use serenity::model::channel::Message;
 use serenity::model::id::{GuildId, UserId};
@@ -154,7 +153,7 @@ impl EventHandler for Handler {
 
 #[tokio::main]
 pub async fn main() {
-    dotenv::dotenv().unwrap();
+    dotenv::dotenv();
 
     let token = std::env::var("DISCORD_TOKEN").expect("no DISCORD_TOKEN set");
 

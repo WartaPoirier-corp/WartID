@@ -2,8 +2,8 @@
 @use crate::model::User;
 @use crate::templates::base;
 
-@(menu_context: &Menu, username: &str, user: User)
+@(menu_context: &Menu, user: User)
 
-@:base(username, menu_context, {
-<h4>@username</h4>
+@:base(&user.username, menu_context, {
+<h4>@user.username</h4>
 })

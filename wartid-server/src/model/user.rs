@@ -11,7 +11,7 @@ use super::*;
 #[derive(Debug, Queryable)]
 pub struct User {
     pub id: Uuid,
-    pub username: Option<String>,
+    pub username: String,
     pub password: Option<String>,
     pub email: Option<String>,
     pub discord_id: Option<i64>,
@@ -51,7 +51,7 @@ impl User {
     fn find_or_create_by_discord_id(
         db: crate::DbConnection,
         l_discord_id: u64,
-        l_discord_name: Option<String>,
+        l_discord_name: String,
     ) -> WartIDResult<User> {
         use crate::schema::users::dsl::*;
 
@@ -107,7 +107,7 @@ impl User {
 #[derive(Insertable)]
 #[table_name = "users"]
 struct NewUser {
-    pub username: Option<String>,
+    pub username: String,
     pub password: Option<String>,
     pub email: Option<String>,
     pub discord_id: Option<i64>,
@@ -148,10 +148,10 @@ mod discord_login {
         /// Subject (Discord user ID)
         sub: u64,
 
-        name: Option<String>,
+        name: String,
     }
 
-    pub fn verify_jwt(token: &str) -> Result<(u64, Option<String>), String> {
+    pub fn verify_jwt(token: &str) -> Result<(u64, String), String> {
         jsonwebtoken::decode(
             token,
             &*KEY,

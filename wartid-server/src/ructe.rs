@@ -1,6 +1,6 @@
 use rocket::response::content::Html as HtmlContent;
 use rocket::response::Responder;
-use rocket::{Request, Response};
+use rocket::Request;
 
 pub struct Ructe(pub Vec<u8>);
 

@@ -1,2 +1,0 @@
-[global.databases]
-wartid = { url = "postgres://user:password@localhost/wartid_dev" }

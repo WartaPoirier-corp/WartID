@@ -16,6 +16,8 @@ pub type WartIDResult<T> = Result<T, WartIDError>;
 
 #[derive(Debug)]
 pub enum WartIDError {
+    DatabaseConnection,
+
     Database(diesel::result::Error),
 
     InvalidCredentials(String),

@@ -8,17 +8,19 @@
         <details open>
             <summary>Comptes</summary>
             <ul>
-                @for (user_id, user_name) in &menu_context.users {
-                    <li><a href="/@@@user_id">@user_name</a></li>
-                }
+            @for (user_id, user_name) in &menu_context.users {
+                <li><a href="/@@@user_id">@user_name</a></li>
+            }
             </ul>
         </details>
     </li>
     <li>
         <details>
-            <summary>WartApps</summary>
+            <summary><a href="/apps">WartApps</a></summary>
             <ul>
-                <li><a href="https://wp-corp.eu.org/">CodiMD edgar.bzh</a></li>
+            @for (app_id, app_name) in &menu_context.apps {
+                <li><a href="/apps/@app_id">@app_name</a></li>
+            }
                 <li><a href="/apps#new">+</a></li>
             </ul>
         </details>

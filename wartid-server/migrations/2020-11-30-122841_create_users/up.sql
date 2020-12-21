@@ -1,6 +1,6 @@
 create table users (
     id uuid primary key default uuid_generate_v4 (),
-    username varchar(64) default null unique,
+    username varchar(64) not null unique,
     password varchar default null,
     email varchar default null,
     discord_id bigint default null unique

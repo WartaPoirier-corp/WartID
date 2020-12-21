@@ -1,4 +1,11 @@
-#![feature(proc_macro_hygiene, decl_macro)]
+#![feature(proc_macro_hygiene, decl_macro, str_split_once)]
+
+#[macro_use]
+mod ructe;
+mod model;
+mod routes;
+mod schema;
+mod utils;
 
 #[macro_use]
 extern crate diesel;
@@ -11,26 +18,17 @@ use std::path::{Path, PathBuf};
 
 use diesel::prelude::*;
 use rocket::config::{ConfigBuilder, Environment};
-use rocket::fairing::Info;
-use rocket::http::route::Kind::Static;
 use rocket::http::{Cookie, Cookies, RawStr, Status};
 use rocket::request::{
-    Form, FormItem, FormItems, FormParseError, FromForm, FromParam, FromRequest, Outcome,
+    Form, FormItems, FormParseError, FromForm, FromFormValue, FromParam, FromRequest, Outcome,
 };
 use rocket::response::status::NotFound;
 use rocket::response::{NamedFile, Redirect};
 use rocket::{Request, Rocket};
 use uuid::Uuid;
 
-use crate::model::{WartIDError, WartIDResult};
+use crate::model::{Menu, WartIDError, WartIDResult};
 use crate::ructe::Ructe;
-use crate::schema::sessions::dsl::sessions;
-
-#[macro_use]
-mod ructe;
-mod model;
-mod routes;
-mod schema;
 
 impl<'r> rocket::response::Responder<'r> for WartIDError {
     fn respond_to(self, request: &Request) -> rocket::response::Result<'r> {
@@ -43,76 +41,101 @@ pub type DbConnection<'a> = &'a diesel::PgConnection;
 #[database("wartid")]
 pub struct DbConn(diesel::PgConnection);
 
-struct OIDCState {}
-
-struct LoginSession {
+pub struct LoginSession {
     user: model::User,
 }
 
-#[derive(Debug)]
-enum LoginSessionError {
+#[derive(Clone, Copy, Debug)]
+pub enum LoginSessionError {
     NoCookie,
     InvalidCookie,
     InvalidSession,
     DatabaseError,
 }
 
-impl<'a, 'r> FromRequest<'a, 'r> for LoginSession {
+impl<'a, 'r> FromRequest<'a, 'r> for &'a LoginSession {
     type Error = LoginSessionError;
 
-    fn from_request(request: &Request) -> Outcome<Self, Self::Error> {
+    fn from_request(request: &'a Request) -> Outcome<Self, Self::Error> {
         let mut cookies: Cookies = request.guard().unwrap();
 
-        // TODO const cookie name
-        let login_session = match cookies.get("login_session") {
-            None => return Outcome::Failure((Status::Forbidden, LoginSessionError::NoCookie)),
-            Some(cookie) => {
-                match cookie.value().parse::<Uuid>() {
-                    Ok(session_uuid) => session_uuid,
-                    Err(_) => {
-                        cookies.remove(Cookie::named("login_session")); // TODO check if works
-                        return Outcome::Failure((
-                            Status::Forbidden,
-                            LoginSessionError::InvalidCookie,
-                        ));
+        request
+            .local_cache(|| {
+                // TODO const cookie name
+                let login_session = match cookies.get("login_session") {
+                    None => {
+                        return Outcome::Failure((Status::Forbidden, LoginSessionError::NoCookie))
                     }
-                }
-            }
-        };
+                    Some(cookie) => {
+                        match cookie.value().parse::<Uuid>() {
+                            Ok(session_uuid) => session_uuid,
+                            Err(_) => {
+                                cookies.remove(Cookie::named("login_session")); // TODO check if works
+                                return Outcome::Failure((
+                                    Status::Forbidden,
+                                    LoginSessionError::InvalidCookie,
+                                ));
+                            }
+                        }
+                    }
+                };
 
-        let db: DbConn = request.guard().map_failure(|_| {
-            (
-                Status::InternalServerError,
-                LoginSessionError::DatabaseError,
-            )
-        })?;
+                let db: DbConn = request.guard().map_failure(|_| {
+                    (
+                        Status::InternalServerError,
+                        LoginSessionError::DatabaseError,
+                    )
+                })?;
 
-        // TODO following 2 assignments are dirty af
-        let session = model::Session::find_by_id(&db, login_session)
-            .map_err(|_| Err((Status::Forbidden, LoginSessionError::InvalidSession)))?
-            .ok_or(Err((Status::Forbidden, LoginSessionError::InvalidSession)))?;
+                // TODO following 2 assignments are dirty af
+                let session = model::Session::find_by_id(&db, login_session)
+                    .map_err(|_| Err((Status::Forbidden, LoginSessionError::InvalidSession)))?
+                    .ok_or(Err((Status::Forbidden, LoginSessionError::InvalidSession)))?;
 
-        let user = model::User::find_by_id(&db, session)
-            .map_err(|_| {
-                (
-                    Status::InternalServerError,
-                    LoginSessionError::DatabaseError,
-                )
+                let user = model::User::find_by_id(&db, session)
+                    .map_err(|_| {
+                        (
+                            Status::InternalServerError,
+                            LoginSessionError::DatabaseError,
+                        )
+                    })
+                    .map_err(|_| {
+                        Err((
+                            // A session token should always correspond to a user
+                            Status::InternalServerError,
+                            LoginSessionError::DatabaseError,
+                        ))
+                    })?
+                    .ok_or(Err((
+                        // A session token should always correspond to a user
+                        Status::InternalServerError,
+                        LoginSessionError::DatabaseError,
+                    )))?;
+
+                Outcome::Success(LoginSession { user })
             })
-            .map_err(|_| {
-                Err((
-                    // A session token should always correspond to a user
-                    Status::InternalServerError,
-                    LoginSessionError::DatabaseError,
-                ))
-            })?
-            .ok_or(Err((
-                // A session token should always correspond to a user
-                Status::InternalServerError,
-                LoginSessionError::DatabaseError,
-            )))?;
+            .as_ref()
+            .map_failure(Clone::clone)
+            .map_forward(|()| ())
+    }
+}
 
-        Outcome::Success(LoginSession { user })
+impl<'a, 'r> FromRequest<'a, 'r> for model::Menu {
+    type Error = WartIDError;
+
+    fn from_request(request: &'a Request) -> Outcome<Self, Self::Error> {
+        let session: &LoginSession = request
+            .guard()
+            .map_failure(|(s, e)| (s, WartIDError::InvalidCredentials(format!("{:?}", e))))?;
+
+        let db: DbConn = request
+            .guard()
+            .map_failure(|(s, ())| (s, WartIDError::DatabaseConnection))?;
+
+        let menu = model::Menu::build(&db, session.user.id)
+            .map_err(|e| Err((Status::InternalServerError, e)))?;
+
+        Outcome::Success(menu)
     }
 }
 
@@ -123,7 +146,7 @@ fn static_file(file: PathBuf) -> Result<NamedFile, NotFound<String>> {
 }
 
 #[get("/")]
-fn root(session: Option<LoginSession>) -> Redirect {
+fn root(session: Option<&LoginSession>) -> Redirect {
     if session.is_some() {
         Redirect::to("/home")
     } else {
@@ -132,8 +155,7 @@ fn root(session: Option<LoginSession>) -> Redirect {
 }
 
 #[get("/home")]
-fn home(_session: LoginSession, db: DbConn) -> WartIDResult<Ructe> {
-    let menu = model::Menu::build(&db)?;
+fn home(menu: Menu) -> WartIDResult<Ructe> {
     Ok(render!(panel::home(&menu)))
 }
 
@@ -152,35 +174,28 @@ impl<'a> FromParam<'a> for UserIdParam<'a> {
 }
 
 #[get("/@me")]
-fn user_view_me(session: LoginSession) -> Redirect {
+fn user_view_me(session: &LoginSession) -> Redirect {
     Redirect::to(format!("/@{}", session.user.id))
 }
 
 #[get("/<user_id>")]
-fn user_view(_guard: LoginSession, db: DbConn, user_id: UserIdParam) -> Option<Ructe> {
+fn user_view(menu: Menu, db: DbConn, user_id: UserIdParam) -> Option<Ructe> {
     let user_id: Uuid = user_id.0.parse().ok()?; // TODO proper 404
 
     let user = model::User::find_by_id(&*db, user_id).ok()??; // TODO proper handling
 
-    let username_ = format!(
-        "@{}",
-        user.username
-            .as_ref()
-            .unwrap_or(&String::from("Utilisateur·ice inconnu·e"))
-    );
-    return Some(render!(panel::users(
-        &model::Menu::build(&*db).ok()?, // TODO ok -> actual result
-        &username_,
-        user
-    )));
+    return Some(render!(panel::users(&menu, user)));
 
     //return Some(session.user.username.unwrap_or(String::from("<?>")));
 
     //Some(format!("{:#?}", &users_[0]))
 }
 
-#[get("/login")]
-fn login(session: Option<LoginSession>) -> Result<Ructe, Redirect> {
+#[get("/login?<redirect_to>")]
+pub fn login(
+    session: Option<&LoginSession>,
+    redirect_to: Option<&RawStr>,
+) -> Result<Ructe, Redirect> {
     if session.is_some() {
         return Err(Redirect::to("/@me"));
     }
@@ -202,13 +217,12 @@ struct LoginCredentials<'a> {
 ///   * _else:_ Redirects to `/@<profile>`
 /// These cases are mutually exclusive. Errors may be reported if conflicting query parameters are
 /// received.
-#[post("/login?<redirect_to>&<oidc_flow..>", data = "<form>")]
+#[post("/login?<redirect_to>", data = "<form>")]
 fn login_post(
     db: DbConn,
     mut cookies: Cookies,
     form: Form<LoginCredentials>,
-    redirect_to: Option<&RawStr>, // TODO Refactor these 2 lines to a tagged union ?
-    oidc_flow: Option<Form<AuthorizeQuery>>,
+    redirect_to: Option<String>, // TODO Refactor these 2 lines to a tagged union ?
 ) -> Result<Redirect, WartIDError> {
     use schema::users::dsl::*;
 
@@ -229,7 +243,7 @@ fn login_post(
 
     Ok(Redirect::to(
         redirect_to
-            .unwrap_or(RawStr::from_str("/@me"))
+            .unwrap_or_else(|| String::from("/@me"))
             .as_str()
             .to_string(),
     ))
@@ -244,113 +258,8 @@ fn logout(mut cookies: Cookies) -> Redirect {
     Redirect::to("/login")
 }
 
-#[derive(FromForm, Debug)]
-struct AuthorizeQuery<'a> {
-    client_id: &'a RawStr,
-    redirect_uri: &'a RawStr,
-    scope: &'a RawStr,
-    response_type: &'a RawStr,
-    response_mode: &'a RawStr,
-    state: Option<&'a RawStr>,
-    nonce: Option<&'a RawStr>,
-}
-
-//register
-//{"application_type":"web","client_id":"ezaF2UVDLiak","client_id_issued_at":1606665967,"client_secret":"880006882680470fa6b281a3a13e7fc6","client_secret_expires_at":0,"redirect_uris":["https://oidcdebugger.com/debug"],"response_types":["code"]}
-
-#[get("/oidc/authorize?<authorize..>")]
-fn oidc_authorize(
-    authorize: Result<Form<AuthorizeQuery>, FormParseError>,
-) -> Result<Redirect, String> {
-    match authorize {
-        Ok(authorize) => Ok({
-            let mut redirect_uri = authorize
-                .redirect_uri
-                .url_decode()
-                .map_err(|e| e.to_string())?;
-
-            redirect_uri.push_str("?code=c177b7b88e014d92980534cc544380cc");
-
-            if let Some(state) = authorize.state {
-                redirect_uri.push_str("&state=");
-                redirect_uri.push_str(state);
-            }
-
-            println!("{}", &redirect_uri);
-
-            Redirect::to(redirect_uri)
-        }),
-        Err(e) => Err(format!("error: {:?}", e)),
-    }
-}
-
-#[derive(FromForm, Debug)]
-struct TokenQuery<'a> {
-    grant_type: &'a RawStr,
-    code: &'a RawStr,
-    client_id: &'a RawStr,
-    client_secret: &'a RawStr,
-    redirect_uri: &'a RawStr,
-}
-
-/// Other auth methods: https://darutk.medium.com/oauth-2-0-client-authentication-4b5f929305d4
-#[derive(Clone, Debug, Eq, PartialEq)]
-struct BasicAuthorization {
-    username: String,
-    password: String,
-}
-
-impl<'a, 'r> FromRequest<'a, 'r> for BasicAuthorization {
-    type Error = String;
-
-    fn from_request(request: &'a Request<'r>) -> Outcome<Self, Self::Error> {
-        let auth = match request.headers().get("Authorization").next() {
-            Some(auth) => auth,
-            None => {
-                return Outcome::Failure((
-                    Status::Forbidden,
-                    String::from("No Authorization header"),
-                ))
-            }
-        };
-
-        if !auth.starts_with("Basic ") {
-            return Outcome::Failure((
-                Status::BadRequest,
-                String::from("Only basic auth is supported"),
-            ));
-        }
-
-        let auth = &auth[6..];
-        let auth = base64::decode(auth).map_err(|e| e.to_string()).unwrap(); // FIXME
-        let auth = std::str::from_utf8(&auth)
-            .map_err(|e| e.to_string())
-            .unwrap(); // FIXME
-
-        let colon = auth
-            .find(':')
-            .ok_or(String::from("Bad format, missing colon"))
-            .unwrap(); // FIXME
-
-        Outcome::Success(BasicAuthorization {
-            username: String::from(&auth[..colon]),
-            password: String::from(&auth[(colon + 1)..]),
-        })
-    }
-}
-
-// {"access_token":"f592dd2cb2614284989bdffa288df8d9","expires_in":3600,"id_token":"eyJhbGciOiJSUzI1NiJ9.eyJpc3MiOiAiaHR0cHM6Ly9sb2NhbGhvc3Q6OTA5MCIsICJzdWIiOiAiYTgyMGJjY2Y5YTdiZTI1ZDQwMGFhN2U3YjdhNDZiMTMzZTFjYTk1MDhlNDQyZmJhN2VhNTBiOTRiODkzZGQwNyIsICJhdWQiOiBbImV6YUYyVVZETGlhayJdLCAiaWF0IjogMTYwNjY3MDMyOSwgImV4cCI6IDE2MDY2NzM5MjksICJhdF9oYXNoIjogIkVJQk9oVkx4eXNUZXczeTdaSzZiM2ciLCAibm9uY2UiOiAiMGUwdWI5bnQzYWF1In0.D74Ek9v_97UJum0rmpb_9vpKkdPOE4sCspuGHA58nbgU65jYsovp70t6c44XBBZqY9J93TvZqFbSKVGPnfJlUFhyegmq8IUUcC-L-DrLULU4IUnu-M4BDjsuXrmc4lZdNZFRj3ZBheuiRDMEKEalOiSzgou4e8kQW7vIScnnmuI","token_type":"Bearer"}
-#[post("/oidc/token", data = "<token>")]
-fn oidc_token<'a>(
-    auth: BasicAuthorization,
-    token: Option<Form<TokenQuery>>,
-) -> Result<String, String> {
-    let token = token.unwrap(); // FIXME
-    Ok(String::from(auth.username))
-}
-
 fn main() {
-    dotenv::dotenv().unwrap();
+    dotenv::dotenv();
 
     #[cfg(feature = "discord_bot")]
     {
@@ -358,15 +267,32 @@ fn main() {
         model::discord_login_init();
     }
 
-    // TODO load database settings from environment variable into a virtual Rocket config
-    // let db_conn = DbConn::fairing();
+    let config = {
+        use std::collections::BTreeMap;
 
-    /*let config = {
-        let config = ConfigBuilder::new(Environment::active().unwrap());
-        config.config.unwrap()
-    };*/
+        /// Builds a single-element BTreeMap
+        #[inline]
+        fn b_tree_map<T>(k: &'static str, v: T) -> BTreeMap<&'static str, T> {
+            let mut x = BTreeMap::new();
+            x.insert(k, v);
+            x
+        }
 
-    let rocket = rocket::ignite()
+        let config = ConfigBuilder::new(Environment::active().unwrap()).extra(
+            "databases",
+            b_tree_map(
+                "wartid",
+                b_tree_map(
+                    "url",
+                    std::env::var("DATABASE_URL").expect("no DATABASE_URL set"),
+                ),
+            ),
+        );
+
+        config.unwrap()
+    };
+
+    rocket::custom(config)
         .attach(DbConn::fairing())
         .mount(
             "/",
@@ -375,13 +301,17 @@ fn main() {
                 root,
                 home,
                 routes::apps::list,
+                routes::apps::new,
+                routes::apps::view,
+                routes::apps::view_update,
+                routes::oauth2::authorize,
+                routes::oauth2::token,
+                routes::oauth2::userinfo,
                 user_view,
                 user_view_me,
                 login,
                 login_post,
                 logout,
-                oidc_authorize,
-                oidc_token,
             ],
         )
         .launch();

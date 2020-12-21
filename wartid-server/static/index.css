@@ -88,13 +88,13 @@ table td:last-child {
     width: 100%;
 }
 
-tr.selected {
+tbody > tr.selected, .table-hover-selected > tbody > tr:hover {
     position: relative;
     background: #316ac5;
     color: white;
 }
 
-tr.selected::after {
+tbody > tr.selected::after, .table-hover-selected > tbody > tr:hover::after {
   content: "";
   top: 0;
   left: 0;
@@ -104,4 +104,14 @@ tr.selected::after {
   position: absolute;
   box-sizing: border-box;
   border: 1px dotted #ce953a;
+  pointer-events: none;
+}
+
+.a-reset {
+    color: inherit;
+    text-decoration: inherit;
+}
+
+input[type=text], textarea {
+    border: 1px solid black;
 }

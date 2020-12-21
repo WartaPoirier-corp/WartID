@@ -1,15 +1,17 @@
 @use crate::model::Menu;
+@use crate::model::UserApp;
 @use crate::templates::base;
 
-@(menu_context: &Menu)
+@(menu_context: &Menu, apps: &[UserApp])
 
 @:base("WartApps", menu_context, {
-<form action="/apps/new">
-    <button id="new" class="target-button">Nouvelle WartApp</button>
-</form>
+<blockquote>
+    Une WartApp est une application créée par l'un·e des membres du groupe, qui peut utiliser WartID ou s'intégrer avec
+    d'autres services fournis par le serveur <a href="https://wp-corp.eu.org">wp-corp.eu.org</a>.
+</blockquote>
 
 <div class="table-container">
-    <table>
+    <table class="table-hover-selected">
         <thead>
         <tr>
             <th><span>App ID</span> <span class="handle" aria-hidden="true"></span></th>
@@ -20,21 +22,41 @@
         </tr>
         </thead>
         <tbody>
-        <tr>
-            <td>1</td>
-            <td>WartaMD</td>
-            <td>Instance CodiMD</td>
-            <td>Edgar</td>
-            <td></td>
-        </tr>
-        <tr class="selected">
-            <td>2</td>
-            <td>shef.top</td>
-            <td>la cuisine miam</td>
-            <td>Johan, Edgar</td>
-            <td></td>
-        </tr>
+        @for app in apps {
+            <tr>
+                <td><a class="a-reset" href="/apps/@app.id">@app.id</a></td>
+                <td><a class="a-reset" href="/apps/@app.id">@app.name</a></td>
+                <td><a class="a-reset" href="/apps/@app.id">@app.description.as_deref().unwrap_or_default() <!-- TODO only display first line --></a></td>
+                <td><a class="a-reset" href="/apps/@app.id"><!-- TODO auteurices --></a></td>
+                <td><a class="a-reset" href="/apps/@app.id"></a></td>
+            </tr>
+        }
         </tbody>
     </table>
+</div>
+
+<div class="window" style="margin: 2em; max-width: 500px;">
+    <div class="title-bar">
+        <div class="title-bar-text">Nouvelle WartApp</div>
+        <div class="title-bar-controls">
+            <button disabled aria-label="Minimize"></button>
+            <button disabled aria-label="Maximize"></button>
+            <button disabled aria-label="Close"></button>
+        </div>
+    </div>
+    <form class="window-body" action="/apps/new" method="post">
+        <label for="name">Nom de la WartApp (modifiable ultérieurement):</label>
+        <input type="text" name="name" id="name" placeholder="le taro" />
+
+        <hr style="margin: 0.8em 0;" />
+
+        <input type="checkbox" name="hidden" id="hidden" />
+        <label for="hidden">WartApp privée (modifiable ultérieurement)</label>
+        <label>(seul·e vous et les personnes choisies plus tard la verront et y auront accès)</label>
+
+        <hr style="margin: 0.8em 0;" />
+
+        <button id="new" class="target-button">Créer</button>
+    </form>
 </div>
 })

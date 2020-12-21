@@ -6,7 +6,7 @@ use uuid::Uuid;
 #[derive(Debug, Queryable)]
 pub struct Session {
     pub id: Uuid,
-    pub account: Uuid,
+    pub users_id: Uuid,
     pub expiration: NaiveDateTime,
 }
 
@@ -29,7 +29,7 @@ impl Session {
             .load::<Self>(db)?
             .into_iter()
             .next()
-            .map(|session| session.account))
+            .map(|session| session.users_id))
     }
 }
 
@@ -38,14 +38,14 @@ use crate::schema::sessions;
 #[derive(Insertable)]
 #[table_name = "sessions"]
 pub struct NewSession {
-    pub account: Uuid,
+    pub users_id: Uuid,
     pub expiration: NaiveDateTime,
 }
 
 impl NewSession {
     pub fn new(account: Uuid) -> Self {
         NewSession {
-            account,
+            users_id: account,
             expiration: Utc::now().naive_utc() + Duration::days(14),
         }
     }
