@@ -1,4 +1,9 @@
-#![feature(proc_macro_hygiene, decl_macro, str_split_once)]
+#![feature(
+    associated_type_defaults,
+    proc_macro_hygiene,
+    decl_macro,
+    str_split_once
+)]
 
 #[macro_use]
 mod ructe;
@@ -16,15 +21,14 @@ extern crate rocket_contrib;
 
 use std::path::{Path, PathBuf};
 
-use diesel::prelude::*;
 use rocket::config::{ConfigBuilder, Environment};
 use rocket::http::{Cookie, Cookies, RawStr, Status};
 use rocket::request::{
-    Form, FormItems, FormParseError, FromForm, FromFormValue, FromParam, FromRequest, Outcome,
+    Form, FormParseError, FromForm, FromFormValue, FromParam, FromRequest, Outcome,
 };
 use rocket::response::status::NotFound;
 use rocket::response::{NamedFile, Redirect};
-use rocket::{Request, Rocket};
+use rocket::Request;
 use uuid::Uuid;
 
 use crate::model::{Menu, WartIDError, WartIDResult};
@@ -159,38 +163,6 @@ fn home(menu: Menu) -> WartIDResult<Ructe> {
     Ok(render!(panel::home(&menu)))
 }
 
-struct UserIdParam<'a>(&'a str);
-
-impl<'a> FromParam<'a> for UserIdParam<'a> {
-    type Error = (); // TODO
-
-    fn from_param(param: &'a RawStr) -> Result<Self, Self::Error> {
-        if param.starts_with('@') {
-            Ok(UserIdParam(&param.as_str()[1..]))
-        } else {
-            Err(())
-        }
-    }
-}
-
-#[get("/@me")]
-fn user_view_me(session: &LoginSession) -> Redirect {
-    Redirect::to(format!("/@{}", session.user.id))
-}
-
-#[get("/<user_id>")]
-fn user_view(menu: Menu, db: DbConn, user_id: UserIdParam) -> Option<Ructe> {
-    let user_id: Uuid = user_id.0.parse().ok()?; // TODO proper 404
-
-    let user = model::User::find_by_id(&*db, user_id).ok()??; // TODO proper handling
-
-    return Some(render!(panel::users(&menu, user)));
-
-    //return Some(session.user.username.unwrap_or(String::from("<?>")));
-
-    //Some(format!("{:#?}", &users_[0]))
-}
-
 #[get("/login?<redirect_to>")]
 pub fn login(
     session: Option<&LoginSession>,
@@ -224,8 +196,6 @@ fn login_post(
     form: Form<LoginCredentials>,
     redirect_to: Option<String>, // TODO Refactor these 2 lines to a tagged union ?
 ) -> Result<Redirect, WartIDError> {
-    use schema::users::dsl::*;
-
     let res = model::User::attempt_login(&db, form.username.as_str(), form.password.as_str())?;
 
     let user = match res {
@@ -259,7 +229,7 @@ fn logout(mut cookies: Cookies) -> Redirect {
 }
 
 fn main() {
-    dotenv::dotenv();
+    let _ = dotenv::dotenv();
 
     #[cfg(feature = "discord_bot")]
     {
@@ -307,8 +277,9 @@ fn main() {
                 routes::oauth2::authorize,
                 routes::oauth2::token,
                 routes::oauth2::userinfo,
-                user_view,
-                user_view_me,
+                routes::users::view,
+                routes::users::view_me,
+                routes::users::view_update,
                 login,
                 login_post,
                 logout,

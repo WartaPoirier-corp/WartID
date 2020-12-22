@@ -1,4 +1,4 @@
-use diesel::{BoolExpressionMethods, ExpressionMethods, QueryDsl, RunQueryDsl};
+use diesel::{ExpressionMethods, QueryDsl, RunQueryDsl};
 use uuid::Uuid;
 
 #[cfg(feature = "discord_bot")]
@@ -55,12 +55,10 @@ impl User {
     ) -> WartIDResult<User> {
         use crate::schema::users::dsl::*;
 
-        if let Some(user) = users
+        // TODO handle not found
+        if let Ok(user) = users
             .filter(discord_id.eq(unsafe { std::mem::transmute::<u64, i64>(l_discord_id) }))
-            .limit(1)
-            .load(db)?
-            .into_iter()
-            .next()
+            .first::<User>(db)
         {
             return Ok(user);
         }
@@ -91,16 +89,84 @@ impl User {
             return User::find_or_create_by_discord_id(db, l_discord_id, l_discord_name).map(Some);
         }
 
-        return Ok(None);
-
-        // TODO implement real login
-
-        let matching_users = users
+        match users
             .filter(username.eq(l_username))
-            .limit(1)
-            .load::<User>(&*db)?;
+            .first::<User>(db)
+            .extract_not_found()
+        {
+            Ok(Some(user)) => {
+                if let Some(db_password) = &user.password {
+                    if bcrypt::verify(l_password, &db_password).expect("bcrypt cannot verify") {
+                        return Ok(Some(user));
+                    }
+                }
 
-        Ok(None)
+                Err(WartIDError::InvalidCredentials(String::from(
+                    "invalid password",
+                )))
+            }
+            other => other,
+        }
+    }
+
+    pub fn update_username(
+        db: crate::DbConnection,
+        user: Uuid,
+        new_username: &str,
+    ) -> WartIDResult<User> {
+        use crate::schema::users::dsl::*;
+
+        diesel::update(users)
+            .filter(id.eq(user))
+            .set(username.eq(new_username))
+            .get_result(db)
+            .map_err(Into::into)
+    }
+
+    pub fn update_email(
+        db: crate::DbConnection,
+        user: Uuid,
+        new_email: &str,
+    ) -> WartIDResult<User> {
+        use crate::schema::users::dsl::*;
+
+        diesel::update(users)
+            .filter(id.eq(user))
+            .set(email.eq(new_email))
+            .get_result(db)
+            .map_err(Into::into)
+    }
+
+    pub fn update_password(
+        db: crate::DbConnection,
+        user: Uuid,
+        new_password: &str,
+    ) -> WartIDResult<User> {
+        use crate::schema::users::dsl::*;
+
+        let new_password = if new_password.is_empty() {
+            None
+        } else {
+            Some(
+                {
+                    let start = std::time::Instant::now();
+
+                    let l_password = bcrypt::hash(new_password, bcrypt::DEFAULT_COST);
+
+                    let elapsed = start.elapsed();
+                    log::debug!(target: file!(), "generated password in {:?}", elapsed);
+
+                    l_password
+                }
+                .map_err(|e| WartIDError::Any(Box::new(e)))?,
+            )
+        };
+
+        diesel::update(users)
+            .filter(id.eq(user))
+            .set(password.eq(new_password))
+            .get_result(db)
+            .map_err(Into::into)
     }
 }
 

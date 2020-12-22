@@ -1,0 +1,79 @@
+@use crate::model::Menu;
+@use crate::model::User;
+@use crate::templates::base;
+
+@(menu_context: &Menu, user: &User, is_me: bool)
+
+@:base(&user.username, menu_context, {
+<div class="window" style="max-width: 500px;">
+    <div class="title-bar">
+        <div class="title-bar-text">@@@user.username</div>
+        <div class="title-bar-controls">
+            <button disabled aria-label="Minimize"></button>
+            <button disabled aria-label="Maximize"></button>
+            <button disabled aria-label="Close"></button>
+        </div>
+    </div>
+    <div class="window-body">
+        <fieldset style="display: flex; flex-direction: row;">
+            <img src="" alt="Photo de profil de @user.username" style="width: 80px;height: 80px;margin-right: 1em;border: 1px solid yellow;">
+            <form method="post">
+                <div class="field-row">
+                    <label for="name">Nom:</label>
+                    @if is_me {
+                    <input type="text" name="name" id="name" placeholder="@user.username" value="@user.username" />
+                    <button name="update-name">Changer le nom</button>
+                    } else {
+                    <span id="name">@user.username</span>
+                    }
+                </div>
+                <div class="field-row">
+                    <label for="id">Identifiant:</label>
+                    <span id="id">@user.id</span>
+                </div>
+            </form>
+        </fieldset>
+
+        @if is_me {
+        <fieldset>
+            <legend>E-mail</legend>
+
+            <p>
+                L'adresse e-mail doit être définie et valide pour pouvoir utiliser certains services OAuth2. De plus,
+                certains services requièrent l'utilisation de la même adresse e-mail que lors de la première connection
+                pour relier le compte (i.e. WartaMD).
+            </p>
+
+            <div class="field-row">
+                <label for="email">Adresse email:</label>
+                <form method="post">
+                    <input type="email" id="email" name="email" placeholder="Laisser vide pour ne pas définir d'e-mail" value="@user.email.as_deref().unwrap_or_default()" />
+                    <button name="update-email">Mettre à jour</button>
+                </form>
+            </div>
+        </fieldset>
+        }
+
+        <fieldset>
+            <legend>Mot de passe</legend>
+
+            <p>
+                Si vous ne configurez pas de mot de passe, la connection devra toujours se faire par le biais de
+                Discord. Il n'y a à cela aucune pénalité, si ce n'est l'aspect impratique de cette methode de
+                connection.
+            </p>
+
+            @if user.password.is_some() {
+            <span style="color: green;">Un mot de passe est actuellement défini</span>
+            } else {
+            <span style="color: red;">Aucun mot de passe n'est actuellement défini</span>
+            }
+
+            <form method="post">
+                <input type="password" name="password" />
+                <button name="update-password">Changer le mot de passe</button>
+            </form>
+        </fieldset>
+    </div>
+</div>
+})

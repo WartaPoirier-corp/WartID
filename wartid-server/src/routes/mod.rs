@@ -1,5 +1,6 @@
 pub mod apps;
 pub mod oauth2;
+pub mod users;
 
 /// Prelude for child modules
 mod prelude {
