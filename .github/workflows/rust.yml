@@ -23,7 +23,7 @@ jobs:
       run: cargo install diesel_cli --no-default-features --features postgres
     - name: Apply migrations
       working-directory: ./wartid-server/
-      run: diesel migrations run
+      run: diesel migration run
     - name: Build
       working-directory: ./wartid-server/
       run: cargo +nightly build --verbose
