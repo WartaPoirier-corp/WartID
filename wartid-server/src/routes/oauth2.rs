@@ -12,119 +12,46 @@ use std::borrow::Cow;
 use std::collections::HashSet;
 use std::str::FromStr;
 
-struct AuthorizeState<Str> {
+impl<'v> FromFormValue<'v> for OAuth2Scopes {
+    type Error = ();
+
+    fn from_form_value(form_value: &'v RawStr) -> Result<Self, Self::Error> {
+        form_value.percent_decode().unwrap_or_default().parse()
+    }
+}
+
+#[derive(serde::Deserialize, serde::Serialize)]
+struct AuthorizeState<Str, O2S> {
+    #[serde(rename = "aud")]
     client: Uuid,
+
+    #[serde(rename = "sub")]
     user: Uuid,
+
+    /// Scopes granted by the user. When requesting access tokens later, the access tokens will only
+    /// be able to request a subset of these scopes.
+    #[serde(rename = "scopes")]
+    initial_scopes: O2S,
+
     redirect_uri: Str,
-    // TODO add scopes
 }
 
-impl<'a> serde::Serialize for AuthorizeState<&'a str> {
-    fn serialize<S>(
-        &self,
-        serializer: S,
-    ) -> Result<<S as serde::Serializer>::Ok, <S as serde::Serializer>::Error>
-    where
-        S: serde::Serializer,
-    {
-        serializer.serialize_str(&format!(
-            "{}:{}:{}",
-            self.client, self.user, self.redirect_uri
-        ))
-    }
-}
+#[derive(serde::Deserialize, serde::Serialize)]
+struct AccessState {
+    #[serde(rename = "aud")]
+    client: Uuid,
 
-impl<'de> serde::Deserialize<'de> for AuthorizeState<String> {
-    fn deserialize<D>(deserializer: D) -> Result<Self, <D as serde::Deserializer<'de>>::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        struct Visitor;
+    #[serde(rename = "sub")]
+    user: Uuid,
 
-        impl<'de> serde::de::Visitor<'de> for Visitor {
-            type Value = AuthorizeState<String>;
-
-            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-                write!(formatter, "a valid AuthorizeState")
-            }
-
-            fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
-            where
-                E: serde::de::Error,
-            {
-                let (client, (user, redirect_uri)) = v
-                    .split_once(':')
-                    .and_then(|(a, b)| Some((a, b.split_once(':')?)))
-                    .ok_or(E::custom("invalid format"))?;
-
-                let uuid_parse = |_| E::custom("cannot parse uuid");
-
-                Ok(AuthorizeState {
-                    client: client.parse().map_err(uuid_parse)?,
-                    user: user.parse().map_err(uuid_parse)?,
-                    redirect_uri: String::from(redirect_uri),
-                })
-            }
-        }
-
-        deserializer.deserialize_str(Visitor)
-    }
+    scopes: OAuth2Scopes,
 }
 
 lazy_static::lazy_static! {
     static ref ACCESS_TOKEN_EXPIRATION: chrono::Duration = chrono::Duration::hours(1);
 
-    static ref JWT_AUTHORIZE: JWT<AuthorizeState<&'static str>, AuthorizeState<String>> = JWT::new("wartid-authorize", chrono::Duration::minutes(10));
-    static ref JWT_ACCESS: JWT<Uuid, Uuid> = JWT::new("wartid-access-token", *ACCESS_TOKEN_EXPIRATION);
-}
-
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-enum OAuth2Scope {
-    /// Grants absolutely nothing special, just here to support clients who ask for it
-    Basic,
-
-    /// Requires the user to have an email address linked to their account
-    Email,
-
-    /// Requires nothing, but allows the login form to authenticate us as fake accounts anyone for
-    /// testing purposes
-    Dev,
-}
-
-impl FromStr for OAuth2Scope {
-    type Err = ();
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "basic" => Ok(Self::Basic),
-            "email" => Ok(Self::Email),
-            "dev" => Ok(Self::Dev),
-            _ => Err(()),
-        }
-    }
-}
-
-#[derive(Clone, Debug, Default)]
-struct OAuth2Scopes(HashSet<OAuth2Scope>);
-
-impl FromStr for OAuth2Scopes {
-    type Err = ();
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(OAuth2Scopes(
-            s.split_ascii_whitespace()
-                .map(str::parse)
-                .collect::<Result<_, _>>()?,
-        ))
-    }
-}
-
-impl<'v> FromFormValue<'v> for OAuth2Scopes {
-    type Error = ();
-
-    fn from_form_value(form_value: &'v RawStr) -> Result<Self, Self::Error> {
-        form_value.parse()
-    }
+    static ref JWT_AUTHORIZE: JWT<AuthorizeState<&'static str, &'static OAuth2Scopes>, AuthorizeState<String, OAuth2Scopes>> = JWT::new("wartid-authorize", chrono::Duration::minutes(10));
+    static ref JWT_ACCESS: JWT<AccessState, AccessState> = JWT::new("wartid-access-token", *ACCESS_TOKEN_EXPIRATION);
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -145,13 +72,28 @@ impl<'v> FromFormValue<'v> for AuthorizeResponseType {
 
 #[derive(FromForm, Debug)]
 pub struct AuthorizeQuery<'a> {
-    client_id: &'a RawStr,
+    client_id: UuidParam,
     redirect_uri: String,
     scope: Option<OAuth2Scopes>,
     response_type: AuthorizeResponseType,
     response_mode: &'a RawStr,
     state: Option<String>,
     nonce: Option<&'a RawStr>,
+}
+
+macro_rules! implies {
+    ($p:expr => $q:expr) => {
+        !$p || $q
+    };
+}
+
+#[cfg(test)]
+#[test]
+fn implies_test() {
+    assert!(implies!(true => true));
+    assert!(!implies!(true => false));
+    assert!(implies!(false => true));
+    assert!(implies!(false => false));
 }
 
 #[get("/oauth2/authorize?<authorize..>")]
@@ -163,6 +105,8 @@ pub fn authorize(
 ) -> WartIDResult<Result<Ructe, Redirect>> {
     match authorize {
         Ok(authorize) => Ok({
+            let authorize = authorize.into_inner();
+
             if authorize.response_type != AuthorizeResponseType::Code {
                 /* FIXME Even though this code is literally unreachable, implement correctly in case
                 things change later */
@@ -172,7 +116,13 @@ pub fn authorize(
             if let Some(session) = session {
                 let redirect_uri = &authorize.redirect_uri;
 
-                // TODO finish
+                let app = UserApp::find_by_id(&db, *authorize.client_id)?
+                    .filter(|app| app.oauth2().is_some())
+                    .ok_or(WartIDError::OAuth2Error("client not found"))?;
+
+                if !app.is_oauth2_redirect_allowed(redirect_uri) {
+                    return Err(WartIDError::OAuth2Error("redirect uri is not configured"));
+                }
 
                 let redirect_uri_short = redirect_uri
                     .split_once("//")
@@ -180,18 +130,22 @@ pub fn authorize(
                     .map(|(left, _)| left)
                     .unwrap_or(redirect_uri.as_str());
 
-                let app = UserApp::find_by_id(&db, authorize.client_id.parse().unwrap())?.unwrap(); // TODO unwrap
+                let scopes = authorize.scope.unwrap_or_default();
 
-                // TODO check if app has oauth enabled
-                // TODO verify redirect_uri with app.oauth_redirect
+                let code = if implies!(scopes.contains(OAuth2Scope::Email) => session.user.email.is_some())
+                {
+                    Some(JWT_AUTHORIZE.encode(AuthorizeState {
+                        client: app.id,
+                        user: session.user.id,
+                        initial_scopes: unsafe { std::mem::transmute(&scopes) },
+                        // :see_no_evil: (FIXME obv)
+                        redirect_uri: unsafe { std::mem::transmute(redirect_uri.as_str()) },
+                    }))
+                } else {
+                    None
+                };
 
-                let code = JWT_AUTHORIZE.encode(AuthorizeState {
-                    client: app.id,
-                    user: session.user.id,
-                    // :see_no_evil: (FIXME obv)
-                    redirect_uri: unsafe { std::mem::transmute(redirect_uri.as_str()) },
-                });
-
+                // TODO Present required scopes to user
                 // TODO X-Frame-Options: Deny
 
                 Ok(render!(oauth2::authorize(
@@ -199,8 +153,9 @@ pub fn authorize(
                     &app,
                     redirect_uri_short,
                     redirect_uri,
-                    &code,
-                    authorize.state.as_deref()
+                    code.as_deref(),
+                    authorize.state.as_deref(),
+                    &scopes
                 )))
             } else {
                 // TODO
@@ -336,10 +291,10 @@ impl<'a, 'r> FromRequest<'a, 'r> for BearerSession {
 
         let database: crate::DbConn = request.guard().unwrap();
 
-        let user = JWT_ACCESS
+        let token_access = JWT_ACCESS
             .decode(bearer)
             .map_err(|_| Err((Status::Unauthorized, "cannot validate access token")))?;
-        let user = User::find_by_id(&database, user)
+        let user = User::find_by_id(&database, token_access.user)
             .map_err(|_| Err((Status::InternalServerError, "database error")))?;
         let user = user.ok_or(Err((
             Status::InternalServerError,
@@ -369,13 +324,17 @@ pub fn token<'a>(
 
     let client_id = client_id.map_err(|_| String::from("cannot parse client uuid"))?;
 
-    let app = UserApp::find_by_id(&db, client_id).unwrap().unwrap(); // TODO
+    let app = match UserApp::find_by_id(&db, client_id) {
+        Ok(Some(app)) => app,
+        Ok(None) => return Err(String::from("unknown client id")),
+        Err(e) => return Err(format!("{:?}", e)),
+    };
 
     if Some(client_password.as_ref()) != app.oauth2().map(|(secret, _)| secret) {
         return Err(String::from("invalid client secret"));
     }
 
-    let user = match data.grant_type {
+    let (user, scopes) = match data.grant_type {
         GrantType::AuthorizationCode => {
             let authorize = JWT_AUTHORIZE
                 .decode(data.code)
@@ -387,14 +346,18 @@ pub fn token<'a>(
 
             // TODO check redirect URI
 
-            authorize.user
+            (authorize.user, authorize.initial_scopes)
         }
         GrantType::RefreshToken => {
             return Err(String::from("NYI")); // TODO
         }
     };
 
-    let access_token = JWT_ACCESS.encode(user);
+    let access_token = JWT_ACCESS.encode(AccessState {
+        user,
+        client: client_id,
+        scopes,
+    });
 
     Ok(Json(TokenResponse {
         access_token,
@@ -420,6 +383,6 @@ pub fn userinfo(session: BearerSession) -> Json<UserInfo> {
     Json(UserInfo {
         sub: user.id,
         name: user.username,
-        email: None, // TODO
+        email: user.email.filter(|_| scopes.contains(OAuth2Scope::Email)),
     })
 }

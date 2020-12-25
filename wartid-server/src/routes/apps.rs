@@ -42,6 +42,7 @@ pub fn view(menu: Menu, db: DbConn, app_id: UuidParam) -> WartIDResult<Option<Ru
 #[derive(Debug)]
 pub enum FormUpdateIntent {
     UpdateGeneral { name: String, description: String },
+    OAuthSetRedirectUri(String),
     OAuthEnable,
     OAuthDisable,
 }
@@ -50,10 +51,12 @@ impl<'a> FromForm<'a> for FormUpdateIntent {
     type Error = FormParseError<'a>;
 
     fn from_form(it: &mut FormItems<'a>, strict: bool) -> Result<Self, Self::Error> {
-        #[derive(FromForm)]
+        #[derive(Debug, FromForm)]
         struct FormUpdateIntentRaw<'a> {
             name: Option<String>,
             description: Option<String>,
+            #[form(field = "oauth-redirect")]
+            oauth_redirect_uri: Option<String>,
 
             // Buttons (mutually exclusive)
             #[form(field = "update-general")]
@@ -62,30 +65,47 @@ impl<'a> FromForm<'a> for FormUpdateIntent {
             oauth_enable: Option<&'a RawStr>,
             #[form(field = "oauth-disable")]
             oauth_disable: Option<&'a RawStr>,
+            #[form(field = "oauth-update-redirect")]
+            oauth_update_redirect: Option<&'a RawStr>,
         }
 
         Ok(match FormUpdateIntentRaw::from_form(it, strict)? {
             FormUpdateIntentRaw {
                 name: Some(name),
                 description: Some(description),
+                oauth_redirect_uri: None,
                 update_general: Some(_),
                 oauth_enable: None,
                 oauth_disable: None,
+                oauth_update_redirect: None,
             } => FormUpdateIntent::UpdateGeneral { name, description },
             FormUpdateIntentRaw {
                 name: None,
                 description: None,
+                oauth_redirect_uri: None,
                 update_general: None,
                 oauth_enable: Some(_),
                 oauth_disable: None,
+                oauth_update_redirect: None,
             } => FormUpdateIntent::OAuthEnable,
             FormUpdateIntentRaw {
                 name: None,
                 description: None,
+                oauth_redirect_uri: None,
                 update_general: None,
                 oauth_enable: None,
                 oauth_disable: Some(_),
+                oauth_update_redirect: None,
             } => FormUpdateIntent::OAuthDisable,
+            FormUpdateIntentRaw {
+                name: None,
+                description: None,
+                oauth_redirect_uri: Some(uri),
+                update_general: None,
+                oauth_enable: None,
+                oauth_disable: None,
+                oauth_update_redirect: Some(_),
+            } => FormUpdateIntent::OAuthSetRedirectUri(uri),
             _ => Err(FormParseError::Unknown("?".into(), "?".into()))?,
         })
     }
@@ -106,6 +126,9 @@ pub fn view_update(
         }
         FormUpdateIntent::OAuthEnable => UserApp::set_oauth(&db, app_id, true),
         FormUpdateIntent::OAuthDisable => UserApp::set_oauth(&db, app_id, false),
+        FormUpdateIntent::OAuthSetRedirectUri(uri) => {
+            UserApp::set_oauth_redirect_uri(&db, app_id, uri)
+        }
     }?;
 
     view_render(menu, app)

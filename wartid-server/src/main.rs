@@ -163,10 +163,11 @@ fn home(menu: Menu) -> WartIDResult<Ructe> {
     Ok(render!(panel::home(&menu)))
 }
 
+#[allow(unused_variables)]
 #[get("/login?<redirect_to>")]
 pub fn login(
     session: Option<&LoginSession>,
-    redirect_to: Option<&RawStr>,
+    redirect_to: Option<&RawStr>, // Not used but required for rocket to be happy
 ) -> Result<Ructe, Redirect> {
     if session.is_some() {
         return Err(Redirect::to("/@me"));

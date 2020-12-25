@@ -34,7 +34,7 @@
         <fieldset>
             <legend>OAuth2</legend>
 
-        @if let Some((secret, _uri)) = &app.oauth2() {
+            @if let Some((secret, _uri)) = &app.oauth2() {
             <div class="field-row">
                 <label for="oauth-secret">Secret OAuth:</label>
                 <input id="oauth-secret" disabled value="@secret" />
@@ -44,14 +44,21 @@
             </div>
             <div class="field-row">
                 <form method="post">
+                    <label for="oauth-redirect">URI de redirection autorisé:</label>
+                    <input type="url" name="oauth-redirect" id="oauth-redirect" value="@app.oauth_redirect" />
+                    <button name="oauth-update-redirect" class="target-button">Mettre à jour l'URI</button>
+                </form>
+            </div>
+            <div class="field-row">
+                <form method="post">
                     <button name="oauth-disable" class="target-button">Désactiver OAuth2</button>
                 </form>
             </div>
-        } else {
+            } else {
             <form method="post" class="field-row">
                 <button name="oauth-enable" class="target-button">Activer OAuth2</button>
             </form>
-        }
+            }
         </fieldset>
     </div>
 </div>

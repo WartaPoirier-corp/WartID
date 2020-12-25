@@ -1,21 +1,24 @@
-use std::fmt::Debug;
-
-use diesel::result::Error;
+mod app;
+mod menu;
+mod scopes;
+mod session;
+mod user;
 
 pub use app::*;
 pub use menu::*;
+pub use scopes::*;
 pub use session::*;
 pub use user::*;
 
-mod app;
-mod menu;
-mod session;
-mod user;
+use diesel::result::Error;
+use std::fmt::Debug;
 
 pub type WartIDResult<T> = Result<T, WartIDError>;
 
 #[derive(Debug)]
 pub enum WartIDError {
+    OAuth2Error(&'static str),
+
     DatabaseConnection,
 
     Database(diesel::result::Error),

@@ -29,6 +29,11 @@ impl UserApp {
             .as_ref()
             .map(|secret| (secret.as_ref(), self.oauth_redirect.as_str()))
     }
+
+    pub fn is_oauth2_redirect_allowed(&self, uri: &str) -> bool {
+        (self.oauth_redirect.len() > "https://a.bc".len())
+            && (uri.starts_with(&self.oauth_redirect))
+    }
 }
 
 impl UserApp {
@@ -97,6 +102,20 @@ impl UserApp {
             } else {
                 None
             }))
+            .get_result(db)
+            .map_err(Into::into)
+    }
+
+    pub fn set_oauth_redirect_uri(
+        db: crate::DbConnection,
+        app: Uuid,
+        uri: String,
+    ) -> WartIDResult<Self> {
+        use crate::schema::user_apps::dsl::*;
+
+        diesel::update(user_apps)
+            .filter(id.eq(app))
+            .set(oauth_redirect.eq(uri))
             .get_result(db)
             .map_err(Into::into)
     }
