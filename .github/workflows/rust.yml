@@ -10,13 +10,23 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build:
-
+  build-server:
     runs-on: ubuntu-latest
 
     steps:
     - uses: actions/checkout@v2
+    - uses: actions-rs/toolchain@v1
+      with:
+        toolchain: nightly
+    - uses: Swatinem/rust-cache@v1
+    - name: Install diesel
+      run: cargo install diesel_cli --no-default-features --features postgres
+    - name: Apply migrations
+      working-directory: ./wartid-server/
+      run: diesel migrations run
     - name: Build
-      run: cargo build --verbose
+      working-directory: ./wartid-server/
+      run: cargo +nightly build --verbose
     - name: Run tests
-      run: cargo test --verbose
+      working-directory: ./wartid-server/
+      run: cargo +nighlty test --verbose
