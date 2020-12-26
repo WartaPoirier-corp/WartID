@@ -7,6 +7,7 @@
 
 #[macro_use]
 mod ructe;
+mod config;
 mod model;
 mod routes;
 mod schema;
@@ -19,20 +20,21 @@ extern crate rocket;
 #[macro_use]
 extern crate rocket_contrib;
 
-use std::path::{Path, PathBuf};
-
+use crate::config::Config;
+use crate::model::{Menu, WartIDError, WartIDResult};
+use crate::ructe::Ructe;
 use rocket::config::{ConfigBuilder, Environment};
 use rocket::http::{Cookie, Cookies, RawStr, Status};
-use rocket::request::{
-    Form, FormParseError, FromForm, FromFormValue, FromParam, FromRequest, Outcome,
-};
+use rocket::request::{Form, FromForm, FromRequest, Outcome};
 use rocket::response::status::NotFound;
 use rocket::response::{NamedFile, Redirect};
 use rocket::Request;
+use std::path::{Path, PathBuf};
 use uuid::Uuid;
 
-use crate::model::{Menu, WartIDError, WartIDResult};
-use crate::ructe::Ructe;
+lazy_static::lazy_static! {
+    pub static ref CONFIG: Config = Config::load();
+}
 
 impl<'r> rocket::response::Responder<'r> for WartIDError {
     fn respond_to(self, request: &Request) -> rocket::response::Result<'r> {

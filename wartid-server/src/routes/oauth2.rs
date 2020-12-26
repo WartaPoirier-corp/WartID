@@ -1,16 +1,12 @@
 use super::prelude::*;
 use crate::utils::jwt::JWT;
-use rocket::data::FromData;
-use rocket::http::hyper::header::{Authorization, Bearer, Headers};
-use rocket::http::uri::{Origin, Uri};
+use rocket::http::uri::Origin;
 use rocket::http::{RawStr, Status};
-use rocket::request::{FormItems, FromForm, Outcome};
 use rocket::request::{FormParseError, FromFormValue, FromRequest};
-use rocket::{Request, Response};
+use rocket::request::{FromForm, Outcome};
+use rocket::Request;
 use rocket_contrib::json::Json;
 use std::borrow::Cow;
-use std::collections::HashSet;
-use std::str::FromStr;
 
 impl<'v> FromFormValue<'v> for OAuth2Scopes {
     type Error = ();
@@ -145,7 +141,6 @@ pub fn authorize(
                     None
                 };
 
-                // TODO Present required scopes to user
                 // TODO X-Frame-Options: Deny
 
                 Ok(render!(oauth2::authorize(
@@ -158,9 +153,7 @@ pub fn authorize(
                     &scopes
                 )))
             } else {
-                // TODO
-                let uri = format!("https://50696dda7567.ngrok.io{}", current_uri.to_string());
-                println!("{}", uri);
+                let uri = format!("{}{}", crate::CONFIG.http_base_url, current_uri.to_string());
                 Err(Redirect::to(uri!(crate::login: uri)))
             }
         }),
@@ -189,8 +182,10 @@ impl<'v> FromFormValue<'v> for GrantType {
 #[derive(FromForm, Debug)]
 pub struct TokenQuery<'a> {
     grant_type: GrantType,
-    code: &'a RawStr,
+    code: Option<&'a RawStr>,
+    refresh_token: Option<&'a RawStr>,
     redirect_uri: &'a RawStr,
+    scope: Option<&'a RawStr>,
 
     client_id: Option<&'a RawStr>,
     client_secret: Option<&'a RawStr>,
@@ -253,8 +248,6 @@ impl serde::Serialize for TokenType {
     where
         S: serde::Serializer,
     {
-        use serde::ser::Error;
-
         match self {
             Self::Bearer => serializer.serialize_str("Bearer"),
         }
@@ -262,13 +255,13 @@ impl serde::Serialize for TokenType {
 }
 
 #[derive(serde::Serialize)]
-pub struct TokenResponse<'a> {
+pub struct TokenResponse {
     access_token: String,
     expires_in: u64,
     token_type: TokenType,
 
     #[serde(skip_serializing_if = "Option::is_none")]
-    refresh_token: Option<&'a str>,
+    refresh_token: Option<String>,
 }
 
 pub struct BearerSession {
@@ -303,17 +296,17 @@ impl<'a, 'r> FromRequest<'a, 'r> for BearerSession {
 
         Outcome::Success(BearerSession {
             user,
-            scopes: Default::default(), // TODO
+            scopes: token_access.scopes,
         })
     }
 }
 
 #[post("/oauth2/token", data = "<data>")]
-pub fn token<'a>(
+pub fn token(
     db: DbConn,
     auth: Option<BasicAuthorization>,
-    data: Form<TokenQuery<'a>>,
-) -> Result<Json<TokenResponse<'static>>, String> {
+    data: Form<TokenQuery>,
+) -> Result<Json<TokenResponse>, String> {
     let (client_id, client_password) = match (auth, data.client_id, data.client_secret) {
         (Some(auth), None, None) => (auth.username.parse(), Cow::Owned(auth.password)),
         (None, Some(client_id), Some(client_password)) => {
@@ -334,10 +327,10 @@ pub fn token<'a>(
         return Err(String::from("invalid client secret"));
     }
 
-    let (user, scopes) = match data.grant_type {
-        GrantType::AuthorizationCode => {
+    let (user, scopes) = match (data.grant_type, data.code, data.refresh_token) {
+        (GrantType::AuthorizationCode, Some(code), None) => {
             let authorize = JWT_AUTHORIZE
-                .decode(data.code)
+                .decode(code)
                 .map_err(|e| format!("invalid code, might have expired: {:?}", e))?; // TODO
 
             if authorize.client != app.id {
@@ -348,8 +341,28 @@ pub fn token<'a>(
 
             (authorize.user, authorize.initial_scopes)
         }
-        GrantType::RefreshToken => {
-            return Err(String::from("NYI")); // TODO
+        (GrantType::RefreshToken, None, Some(refresh_token)) => {
+            let session = OAuth2Session::find_by_token(&db, refresh_token.as_str()).map_err(|e| format!("{:?}", e))?;
+
+            match session {
+                Some(session) => {
+                    if session.user_apps_id != app.id {
+                        return Err(String::from("Forbidden app"));
+                    }
+
+                    (session.users_id, session.initial_scopes.parse().unwrap_or_default())
+                },
+                None => return Err(String::from("No session found for this refresh token")), // TODO proper JSON errors
+            }
+        }
+        _ => return Err(String::from("authorization_code grant type can only be used with ?code, and refresh_token grant type can only be used with ?refresh_token")),
+    };
+
+    let refresh_token = match OAuth2Session::insert_or_refresh(&db, user, app.id, &scopes) {
+        Ok(refresh_token) => Some(refresh_token),
+        Err(e) => {
+            log::error!("couldn't insert refresh token: {:?}", e);
+            None
         }
     };
 
@@ -363,7 +376,7 @@ pub fn token<'a>(
         access_token,
         expires_in: ACCESS_TOKEN_EXPIRATION.num_seconds() as _,
         token_type: TokenType::Bearer,
-        refresh_token: None,
+        refresh_token,
     }))
 }
 
@@ -379,6 +392,8 @@ pub struct UserInfo {
 #[get("/oauth2/userinfo")]
 pub fn userinfo(session: BearerSession) -> Json<UserInfo> {
     let BearerSession { user, scopes } = session;
+
+    println!("scopes: {:?}", scopes);
 
     Json(UserInfo {
         sub: user.id,

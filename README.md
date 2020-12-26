@@ -11,6 +11,26 @@ _:fr: Fournisseur d'authentification (/ autorisation ?) pour les Warta-services 
   * Main tech stack: [`rocket`](https://rocket.rs/), [`diesel`](https://diesel.rs/), [`ructe`](https://github.com/kaj/ructe) and `serenity` (inspired by [Plume](https://joinplu.me/), go check it out btw)
   * Other noteworthy external stuff depended on: [`xp.css`](https://botoxparty.github.io/XP.css/), `postgresql`
 
+## Install / run
+
+Variables:
+
+```dotenv
+# Discord bot
+DISCORD_TOKEN=...
+DISCORD_ALLOWED_GUILDS=012345678901234567
+
+# Server
+DATABASE_URL=postgres://username:password@localhost/wartid
+HTTP_BASE_URL=http://localhost:8000/
+```
+
+```
+cd wartid-server
+cargo run --manifest-path ../wartid-server-discord-bot/Cargo.toml &
+cargo run --features discord-bot
+```
+
 ## Security notice
 
   * User passwords are stored and validated with bcrypt

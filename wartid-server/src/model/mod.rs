@@ -1,11 +1,13 @@
 mod app;
 mod menu;
+mod oauth2session;
 mod scopes;
 mod session;
 mod user;
 
 pub use app::*;
 pub use menu::*;
+pub use oauth2session::*;
 pub use scopes::*;
 pub use session::*;
 pub use user::*;
