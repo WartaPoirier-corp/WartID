@@ -30,7 +30,7 @@ jobs:
 
     steps:
     - name: Test DB (and interrupt action if it doesn't work)
-      run: psql --host=localhost --username wartid --password wartid -d wartid --command "\q"
+      run: psql --host=localhost --username=wartid --password=wartid -d=wartid --command="\q"
     - uses: actions/checkout@v2
     - uses: actions-rs/toolchain@v1
       with:
