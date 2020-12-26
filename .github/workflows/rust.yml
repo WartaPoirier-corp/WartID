@@ -48,4 +48,4 @@ jobs:
       run: cargo +nightly build --verbose
     - name: Run tests
       working-directory: ./wartid-server/
-      run: cargo +nighlty test --verbose
+      run: cargo +nightly test --verbose
