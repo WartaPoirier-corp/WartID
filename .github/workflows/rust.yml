@@ -13,7 +13,24 @@ jobs:
   build-server:
     runs-on: ubuntu-latest
 
+    services:
+      postgres:
+        image: postgres
+        env:
+          POSTGRES_DB: wartid
+          POSTGRES_USER: wartid
+          POSTGRES_PASSWORD: wartid
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
     steps:
+    - name: Test DB (and interrupt action if it doesn't work)
+      run: psql --host=localhost --username wartid --password wartid -d wartid --command "\q"
     - uses: actions/checkout@v2
     - uses: actions-rs/toolchain@v1
       with:
@@ -24,6 +41,8 @@ jobs:
     - name: Apply migrations
       working-directory: ./wartid-server/
       run: diesel migration run
+      env:
+        DATABASE_URL: postgres://wartid:wartid@localhost/wartid
     - name: Build
       working-directory: ./wartid-server/
       run: cargo +nightly build --verbose
