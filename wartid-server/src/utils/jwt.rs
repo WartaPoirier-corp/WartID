@@ -83,8 +83,18 @@ impl<'de, ClaimsIn: Serialize + 'static, ClaimsOut: DeserializeOwned + 'static>
     }
 
     pub fn decode(&self, token: &str) -> Result<ClaimsOut, JWTValidationError> {
-        let data = jsonwebtoken::decode(token, &self.key_dec, &Default::default())
-            .map_err(|_| JWTValidationError::InvalidSignature)?;
+        let data = jsonwebtoken::decode(
+            token,
+            &self.key_dec,
+            &Validation {
+                validate_exp: false,
+                ..Validation::default()
+            },
+        )
+        .map_err(|e| {
+            println!("{:?}", e);
+            JWTValidationError::InvalidSignature
+        })?;
 
         let claims: BaseClaims<String, ClaimsOut> = data.claims;
 

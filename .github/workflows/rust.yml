@@ -1,0 +1,51 @@
+name: Rust
+
+on:
+  push:
+    branches: [ early-dev, main, ci ]
+  pull_request:
+    branches: [ early-dev, main, ci ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build-server:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres
+        env:
+          POSTGRES_DB: wartid
+          POSTGRES_USER: wartid
+          POSTGRES_PASSWORD: wartid
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+    - name: Test DB, install uuid-ossp, and interrupt action if it doesn't work
+      run: psql postgres://wartid:wartid@localhost/wartid --command='create extension "uuid-ossp";'
+    - uses: actions/checkout@v2
+    - uses: actions-rs/toolchain@v1
+      with:
+        toolchain: nightly
+    - uses: Swatinem/rust-cache@v1
+    - name: Install diesel
+      run: cargo install diesel_cli --no-default-features --features postgres
+    - name: Apply migrations
+      working-directory: ./wartid-server/
+      run: diesel migration run
+      env:
+        DATABASE_URL: postgres://wartid:wartid@localhost/wartid
+    - name: Build
+      working-directory: ./wartid-server/
+      run: cargo +nightly build --verbose
+    - name: Run tests
+      working-directory: ./wartid-server/
+      run: cargo +nightly test --verbose
