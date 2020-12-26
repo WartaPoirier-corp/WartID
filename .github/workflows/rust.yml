@@ -29,8 +29,8 @@ jobs:
           - 5432:5432
 
     steps:
-    - name: Test DB (and interrupt action if it doesn't work)
-      run: psql postgres://wartid:wartid@localhost/wartid --command="\q"
+    - name: Test DB, install uuid-ossp, and interrupt action if it doesn't work
+      run: psql postgres://wartid:wartid@localhost/wartid --command='create extension "uuid-ossp";'
     - uses: actions/checkout@v2
     - uses: actions-rs/toolchain@v1
       with:
