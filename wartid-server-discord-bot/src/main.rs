@@ -29,6 +29,7 @@ struct Claims {
 
 #[derive(Debug)]
 enum EncodeError {
+    UndefinedKeyFileVar,
     InvalidKeyLength,
     KeyFile(std::io::Error),
     Jwt(jsonwebtoken::errors::Error),
@@ -41,7 +42,10 @@ impl From<std::io::Error> for EncodeError {
 }
 
 async fn encode(discord_user: UserId, name: String) -> Result<String, EncodeError> {
-    let key = async_fs::read("discord_jwt.key").await?;
+    let key = async_fs::read(
+        std::env::var("DISCORD_KEY_FILE").map_err(|_| EncodeError::UndefinedKeyFileVar)?,
+    )
+    .await?;
 
     if key.len() != 32 {
         return Err(EncodeError::InvalidKeyLength);
@@ -84,6 +88,7 @@ impl EventHandler for Handler {
 
         if !found_in_guild {
             eprintln!("Foreign user attempted to get a token");
+            received_message.reply(&ctx, "Je te connais pas.").await;
             return;
         }
 
@@ -153,7 +158,7 @@ impl EventHandler for Handler {
 
 #[tokio::main]
 pub async fn main() {
-    dotenv::dotenv();
+    let _ = dotenv::dotenv();
 
     let token = std::env::var("DISCORD_TOKEN").expect("no DISCORD_TOKEN set");
 

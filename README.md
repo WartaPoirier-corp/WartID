@@ -16,6 +16,9 @@ _:fr: Fournisseur d'authentification (/ autorisation ?) pour les Warta-services 
 Variables:
 
 ```dotenv
+# Both
+DISCORD_KEY_FILE=discord_jwt.key
+
 # Discord bot
 DISCORD_TOKEN=...
 DISCORD_ALLOWED_GUILDS=012345678901234567

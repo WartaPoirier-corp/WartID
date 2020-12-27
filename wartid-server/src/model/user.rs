@@ -1,12 +1,7 @@
+use super::*;
+use crate::schema::users;
 use diesel::{ExpressionMethods, QueryDsl, RunQueryDsl};
 use uuid::Uuid;
-
-#[cfg(feature = "discord_bot")]
-pub use discord_login::{destroy as discord_login_destroy, init as discord_login_init};
-
-use crate::schema::users;
-
-use super::*;
 
 #[derive(Debug, Queryable)]
 pub struct User {
@@ -183,15 +178,13 @@ struct NewUser {
 mod discord_login {
     use jsonwebtoken::{DecodingKey, TokenData, Validation};
 
-    const KEY_FILE: &str = "discord_jwt.key";
-
     lazy_static::lazy_static! {
         static ref KEY: DecodingKey<'static> = {
             use rand::Rng;
 
             let gen: &'static _ = Box::<[u8; 32]>::leak(Box::new(rand::rngs::OsRng.gen()));
 
-            std::fs::write(KEY_FILE, gen).expect("cannot write key file");
+            std::fs::write(crate::CONFIG.discord_key_file, gen).expect("cannot write key file");
 
             DecodingKey::from_secret(gen)
         };
@@ -202,7 +195,7 @@ mod discord_login {
     }
 
     pub fn destroy() {
-        std::fs::remove_file(KEY_FILE).expect("cannot remove key file");
+        std::fs::remove_file(crate::CONFIG.discord_key_file).expect("cannot remove key file");
         println!("Removed discord bot JWT key file");
         std::process::exit(0)
     }
