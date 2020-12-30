@@ -1,10 +1,10 @@
-@use crate::model::Menu;
+@use crate::model::PageContext;
 @use crate::model::UserApp;
 @use crate::templates::base;
 
-@(menu_context: &Menu, app: &UserApp)
+@(ctx: &PageContext, app: &UserApp)
 
-@:base(&app.name, menu_context, {
+@:base(&app.name, ctx, {
 <div class="window" style="max-width: 500px;">
     <div class="title-bar">
         <div class="title-bar-text">@app.name</div>

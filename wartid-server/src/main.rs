@@ -21,7 +21,7 @@ extern crate rocket;
 extern crate rocket_contrib;
 
 use crate::config::Config;
-use crate::model::{Menu, WartIDError, WartIDResult};
+use crate::model::{WartIDError, WartIDResult};
 use crate::ructe::Ructe;
 use rocket::config::{ConfigBuilder, Environment};
 use rocket::http::{Cookie, Cookies, RawStr, Status};
@@ -31,6 +31,12 @@ use rocket::response::{NamedFile, Redirect};
 use rocket::Request;
 use std::path::{Path, PathBuf};
 use uuid::Uuid;
+
+/// Ructe's parser is really bad and won't let us use "complex" types (that is, types with `<>`,
+/// `::`, `[]`, etc. in their syntax), so I'm type-def-ing aliases here.
+pub mod ructe_types {
+    pub type Flashes<'a> = &'a [(std::borrow::Cow<'static, str>, bool)];
+}
 
 lazy_static::lazy_static! {
     pub static ref CONFIG: Config = Config::load();
@@ -126,7 +132,7 @@ impl<'a, 'r> FromRequest<'a, 'r> for &'a LoginSession {
     }
 }
 
-impl<'a, 'r> FromRequest<'a, 'r> for model::Menu {
+impl<'a, 'r> FromRequest<'a, 'r> for model::PageContext {
     type Error = WartIDError;
 
     fn from_request(request: &'a Request) -> Outcome<Self, Self::Error> {
@@ -138,10 +144,10 @@ impl<'a, 'r> FromRequest<'a, 'r> for model::Menu {
             .guard()
             .map_failure(|(s, ())| (s, WartIDError::DatabaseConnection))?;
 
-        let menu = model::Menu::build(&db, session.user.id)
-            .map_err(|e| Err((Status::InternalServerError, e)))?;
+        let ctx =
+            Self::new(&db, session.user.id).map_err(|e| Err((Status::InternalServerError, e)))?;
 
-        Outcome::Success(menu)
+        Outcome::Success(ctx)
     }
 }
 
@@ -161,8 +167,8 @@ fn root(session: Option<&LoginSession>) -> Redirect {
 }
 
 #[get("/home")]
-fn home(menu: Menu) -> WartIDResult<Ructe> {
-    Ok(render!(panel::home(&menu)))
+fn home(ctx: model::PageContext) -> WartIDResult<Ructe> {
+    Ok(render!(panel::home(&ctx)))
 }
 
 #[allow(unused_variables)]

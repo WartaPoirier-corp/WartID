@@ -1,8 +1,8 @@
-@use crate::model::Menu;
+@use crate::model::PageContext;
 @use crate::model::User;
 @use crate::templates::base;
 
-@(menu_context: &Menu, user: &User, is_me: bool)
+@(menu_context: &PageContext, user: &User, is_me: bool)
 
 @:base(&user.username, menu_context, {
 <div class="window" style="max-width: 500px;">

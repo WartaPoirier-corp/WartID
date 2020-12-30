@@ -41,5 +41,6 @@ mod prelude {
     use rocket::request::{FromFormValue, FromParam};
     pub use rocket::response::Redirect;
     use rocket::Request;
+    pub use std::borrow::Cow;
     pub use uuid::Uuid;
 }

@@ -1,6 +1,6 @@
-@use crate::model::Menu;
+@use crate::model::PageContext;
 
-@(menu_context: &Menu)
+@(ctx: &PageContext)
 
 <ul class="tree-view">
     <li><a href="/home">Accueil</a></li>
@@ -8,9 +8,9 @@
         <details open>
             <summary>Comptes</summary>
             <ul>
-            @for (user_id, user_name) in &menu_context.users {
+                @for (user_id, user_name) in &ctx.users {
                 <li><a href="/@@@user_id">@user_name</a></li>
-            }
+                }
             </ul>
         </details>
     </li>
@@ -18,9 +18,9 @@
         <details>
             <summary><a href="/apps">WartApps</a></summary>
             <ul>
-            @for (app_id, app_name) in &menu_context.apps {
+                @for (app_id, app_name) in &ctx.apps {
                 <li><a href="/apps/@app_id">@app_name</a></li>
-            }
+                }
                 <li><a href="/apps#new">+</a></li>
             </ul>
         </details>

@@ -1,16 +1,18 @@
-@use crate::model::Menu;
+@use crate::model::PageContext;
 @use crate::templates::base_raw;
 @use crate::templates::menu;
+@use crate::templates::partials::flash;
 
-@(title: &str, menu_context: &Menu, content: Content)
+@(title: &str, ctx: &PageContext, content: Content)
 
 @:base_raw(title, {
 <link rel="stylesheet" href="/static/index.css"/>
 }, {
 <aside>
-@:menu(menu_context)
+@:menu(ctx)
 </aside>
 <main>
-    @:content()
+@:flash(&ctx.flash_messages)
+@:content()
 </main>
 })

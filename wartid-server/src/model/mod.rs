@@ -1,13 +1,13 @@
 mod app;
-mod menu;
 mod oauth2session;
+mod page_context;
 mod scopes;
 mod session;
 mod user;
 
 pub use app::*;
-pub use menu::*;
 pub use oauth2session::*;
+pub use page_context::*;
 pub use scopes::*;
 pub use session::*;
 pub use user::*;
@@ -26,6 +26,8 @@ pub enum WartIDError {
     Database(diesel::result::Error),
 
     InvalidCredentials(String),
+
+    InvalidForm(String),
 
     Any(Box<dyn std::error::Error>),
 

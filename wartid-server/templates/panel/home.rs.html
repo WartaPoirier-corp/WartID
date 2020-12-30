@@ -1,9 +1,9 @@
-@use crate::model::Menu;
+@use crate::model::PageContext;
 @use crate::templates::base;
 
-@(menu_context: &Menu)
+@(ctx: &PageContext)
 
-@:base("Accueil", menu_context, {
+@:base("Accueil", ctx, {
 <p>
     Bienvenue sur WartID, le portail de connection de la WPcorp. Il n'y a pas grand chose à faire ici si ce n'est créer,
     configurer et administrer vos WartApps existantes.

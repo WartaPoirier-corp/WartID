@@ -36,7 +36,7 @@ pub fn view_me(session: &LoginSession) -> Redirect {
 
 #[get("/<user_id>")]
 pub fn view(
-    menu: Menu,
+    ctx: PageContext,
     session: &LoginSession,
     db: DbConn,
     user_id: UuidParamWithAt,
@@ -50,7 +50,7 @@ pub fn view(
     };
 
     return Ok(Some(render!(panel::user_view(
-        &menu,
+        &ctx;
         &user,
         session.user.id == user_id
     ))));
@@ -114,7 +114,7 @@ impl<'a> FromForm<'a> for FormUpdateIntent {
 
 #[post("/<user_id>", data = "<data>")]
 pub fn view_update(
-    menu: Menu,
+    mut ctx: PageContext,
     session: &LoginSession,
     db: DbConn,
     user_id: UuidParamWithAt,
@@ -128,13 +128,53 @@ pub fn view_update(
         )));
     }
 
-    let user = match data.into_inner() {
-        FormUpdateIntent::UpdateName(name) => User::update_username(&db, user_id, &name),
-        FormUpdateIntent::UpdateEmail(email) => User::update_email(&db, user_id, &email),
-        FormUpdateIntent::UpdatePassword(password) => {
-            User::update_password(&db, user_id, &password)
-        }
-    }?;
+    let (user, success_message) = match data.into_inner() {
+        FormUpdateIntent::UpdateName(name) => {
+            if name.len() < 3 {
+                ctx.add_flash_message(
+                    Cow::Borrowed("Le nom doit faire minimum 3 caractères."),
+                    true,
+                );
+                return Ok(render!(panel::user_view(&ctx; &session.user, true)));
+            };
 
-    return Ok(render!(panel::user_view(&menu, &user, true)));
+            (
+                User::update_username(&db, user_id, &name)?,
+                "Nom mis à jour avec succès !",
+            )
+        }
+        FormUpdateIntent::UpdateEmail(email) => {
+            // TODO real verification
+            if email.len() < 6 && !email.contains('@') {
+                ctx.add_flash_message(
+                    Cow::Borrowed("Merci de rentrer une adresse e-mail valide."),
+                    true,
+                );
+                return Ok(render!(panel::user_view(&ctx; &session.user, true)));
+            };
+
+            (
+                User::update_email(&db, user_id, &email)?,
+                "Adresse e-mail mise à jour avec succès !",
+            )
+        }
+        FormUpdateIntent::UpdatePassword(password) => {
+            if password.len() < 8 {
+                ctx.add_flash_message(
+                    Cow::Borrowed("Le mot de passe doit faire minimum 8 caractères."),
+                    true,
+                );
+                return Ok(render!(panel::user_view(&ctx; &session.user, true)));
+            };
+
+            (
+                User::update_password(&db, user_id, &password)?,
+                "Mot de passe mis à jour avec succès !",
+            )
+        }
+    };
+
+    ctx.add_flash_message(Cow::Borrowed(success_message), false);
+
+    return Ok(render!(panel::user_view(&ctx; &user, true)));
 }

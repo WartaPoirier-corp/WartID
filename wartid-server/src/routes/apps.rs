@@ -4,10 +4,10 @@ use rocket::request::{FormItems, FormParseError, FromForm};
 use std::ops::Deref;
 
 #[get("/apps")]
-pub fn list(menu: Menu, session: &LoginSession, db: DbConn) -> WartIDResult<Ructe> {
+pub fn list(ctx: PageContext, session: &LoginSession, db: DbConn) -> WartIDResult<Ructe> {
     let apps = UserApp::find_all(&db, session.user.id)?;
 
-    Ok(render!(panel::apps_list(&menu, &apps[..])))
+    Ok(render!(panel::apps_list(&ctx, &apps[..])))
 }
 
 #[derive(FromForm)]
@@ -25,18 +25,18 @@ pub fn new(session: &LoginSession, db: DbConn, data: Form<FormNewApp>) -> WartID
     Ok(Redirect::to(format!("/apps/{}", id)))
 }
 
-fn view_render(menu: Menu, app: UserApp) -> WartIDResult<Option<Ructe>> {
-    Ok(Some(render!(panel::app_view(&menu, &app))))
+fn view_render(ctx: PageContext, app: UserApp) -> WartIDResult<Option<Ructe>> {
+    Ok(Some(render!(panel::app_view(&ctx, &app))))
 }
 
 #[get("/apps/<app_id>")]
-pub fn view(menu: Menu, db: DbConn, app_id: UuidParam) -> WartIDResult<Option<Ructe>> {
+pub fn view(ctx: PageContext, db: DbConn, app_id: UuidParam) -> WartIDResult<Option<Ructe>> {
     let app = match UserApp::find_by_id(&db, *app_id)? {
         Some(app) => app,
         None => return Ok(None),
     };
 
-    view_render(menu, app)
+    view_render(ctx, app)
 }
 
 #[derive(Debug)]
@@ -113,23 +113,49 @@ impl<'a> FromForm<'a> for FormUpdateIntent {
 
 #[post("/apps/<app_id>", data = "<data>")]
 pub fn view_update(
-    menu: Menu,
+    mut ctx: PageContext,
     db: DbConn,
     app_id: UuidParam,
     data: Form<FormUpdateIntent>,
 ) -> WartIDResult<Option<Ructe>> {
     let app_id = *app_id;
 
-    let app = match data.into_inner() {
+    let (app, success_message) = match data.into_inner() {
         FormUpdateIntent::UpdateGeneral { name, description } => {
-            UserApp::set_name_description(&db, app_id, &name, &description)
-        }
-        FormUpdateIntent::OAuthEnable => UserApp::set_oauth(&db, app_id, true),
-        FormUpdateIntent::OAuthDisable => UserApp::set_oauth(&db, app_id, false),
-        FormUpdateIntent::OAuthSetRedirectUri(uri) => {
-            UserApp::set_oauth_redirect_uri(&db, app_id, uri)
-        }
-    }?;
+            if name.len() < 3 {
+                ctx.add_flash_message(
+                    Cow::Borrowed("Le nom de la WartApp doit faire minimum 3 caractères de long."),
+                    true,
+                );
+                return view_render(
+                    ctx,
+                    match UserApp::find_by_id(&db, app_id) {
+                        Ok(Some(app)) => app,
+                        Ok(None) => return Ok(None),
+                        Err(err) => return Err(err),
+                    },
+                );
+            }
 
-    view_render(menu, app)
+            (
+                UserApp::set_name_description(&db, app_id, &name, &description)?,
+                "Nom et/ou description de l'app mis·es à jour avec succès.",
+            )
+        }
+        FormUpdateIntent::OAuthEnable => (
+            UserApp::set_oauth(&db, app_id, true)?,
+            "Secret OAuth2 généré.",
+        ),
+        FormUpdateIntent::OAuthDisable => {
+            (UserApp::set_oauth(&db, app_id, false)?, "OAuth2 désactivé.")
+        }
+        FormUpdateIntent::OAuthSetRedirectUri(uri) => (
+            UserApp::set_oauth_redirect_uri(&db, app_id, uri)?,
+            "URI de redirection OAuth2 autorisé mis à jour.",
+        ),
+    };
+
+    ctx.add_flash_message(Cow::Borrowed(success_message), false);
+
+    view_render(ctx, app)
 }
