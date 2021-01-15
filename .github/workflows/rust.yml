@@ -45,7 +45,7 @@ jobs:
         DATABASE_URL: postgres://wartid:wartid@localhost/wartid
     - name: Build
       working-directory: ./wartid-server/
-      run: cargo +nightly build --verbose
+      run: cargo build --verbose
     - name: Run tests
       working-directory: ./wartid-server/
-      run: cargo +nightly test --verbose
+      run: cargo test --verbose
