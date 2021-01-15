@@ -13,7 +13,7 @@ impl Config {
     pub fn load() -> Self {
         Self {
             http_base_url: {
-                let mut var = env::var("HTTP_BASE_URL").unwrap();
+                let mut var = env::var("HTTP_BASE_URL").expect("no HTTP_BASE_URL set");
                 if !var.ends_with('/') {
                     var.push('/')
                 }

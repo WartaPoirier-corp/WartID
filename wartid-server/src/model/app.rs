@@ -1,15 +1,12 @@
-use super::*;
-use crate::schema::{user_apps, user_apps_managers};
-use diesel::backend::Backend;
-use diesel::deserialize::FromSql;
 use diesel::expression::exists::exists;
 use diesel::{
     BoolExpressionMethods, Connection, ExpressionMethods, QueryDsl, Queryable, RunQueryDsl,
 };
-use serde::export::Formatter;
-use std::convert::TryInto;
-use std::fmt::Write;
 use uuid::Uuid;
+
+use crate::schema::{user_apps, user_apps_managers};
+
+use super::*;
 
 type OAuthSecret = String;
 
