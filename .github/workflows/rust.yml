@@ -33,8 +33,6 @@ jobs:
       run: psql postgres://wartid:wartid@localhost/wartid --command='create extension "uuid-ossp";'
     - uses: actions/checkout@v2
     - uses: actions-rs/toolchain@v1
-      with:
-        toolchain: nightly
     - uses: Swatinem/rust-cache@v1
     - name: Install diesel
       run: cargo install diesel_cli --no-default-features --features postgres
