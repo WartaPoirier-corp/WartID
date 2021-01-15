@@ -1,6 +1,6 @@
 use chrono::{DateTime, Duration, Utc};
 use jsonwebtoken::*;
-use serde::export::PhantomData;
+use std::marker::PhantomData;
 use serde::{de::DeserializeOwned, Serialize};
 
 #[cfg(test)]
