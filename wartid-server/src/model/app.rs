@@ -6,9 +6,8 @@ use diesel::expression::exists::exists;
 use diesel::{
     BoolExpressionMethods, Connection, ExpressionMethods, QueryDsl, Queryable, RunQueryDsl,
 };
-use serde::export::Formatter;
 use std::convert::TryInto;
-use std::fmt::Write;
+use std::fmt::{Formatter, Write};
 use uuid::Uuid;
 
 type OAuthSecret = String;

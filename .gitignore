@@ -5,3 +5,6 @@ discord_jwt.key
 *.env
 .idea
 *.iml
+
+postgres/
+postgres_data/
