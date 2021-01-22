@@ -84,11 +84,13 @@
             fi
         '';
       };
-    }) // (with nixpkgs.lib; {
-      nixosModule = { config, pkgs }:
+    }) // {
+      nixosModule = { config, pkgs, lib, ... }:
         let
           cfg = config.services.wartid;
-        in {
+        in
+        with lib;
+        {
           options.services.wartid = {
             enable = mkEnableOption "WartID server";
             enableDiscordBot = mkEnableOption "WartID Discord bot";
@@ -172,5 +174,5 @@
             };
           };
       };
-    });
+    };
 }
