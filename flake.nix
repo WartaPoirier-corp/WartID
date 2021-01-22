@@ -160,6 +160,8 @@
               after = [ "network.target" ];
               environment = {
                 DISCORD_KEY_FILE = "/tmp/wartid/discord_jwt.key";
+                DISCORD_TOKEN = cfg.discordToken;
+                DISCORD_ALLOWED_GUILD = concatStringsSep "," (builtins.map builtins.toString cfg.discordAllowedGuilds)
               };
               serviceConfig = {
                 ExecStart = "/${pkgs.wartid-server-discord-bot}";
