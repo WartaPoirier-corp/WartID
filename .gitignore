@@ -1,6 +1,4 @@
 /target
-Cargo.lock
-discord_jwt.key
 
 *.env
 .idea

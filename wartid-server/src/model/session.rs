@@ -1,7 +1,10 @@
-use super::WartIDResult;
 use chrono::{Duration, NaiveDateTime, Utc};
-use diesel::{BoolExpressionMethods, ExpressionMethods, QueryDsl, QueryResult, RunQueryDsl};
+use diesel::{BoolExpressionMethods, ExpressionMethods, QueryDsl, RunQueryDsl};
 use uuid::Uuid;
+
+use crate::schema::sessions;
+
+use super::WartIDResult;
 
 #[derive(Debug, Queryable)]
 pub struct Session {
@@ -32,8 +35,6 @@ impl Session {
             .map(|session| session.users_id))
     }
 }
-
-use crate::schema::sessions;
 
 #[derive(Insertable)]
 #[table_name = "sessions"]

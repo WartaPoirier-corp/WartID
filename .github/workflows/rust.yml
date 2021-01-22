@@ -34,7 +34,7 @@ jobs:
     - uses: actions/checkout@v2
     - uses: actions-rs/toolchain@v1
       with:
-        toolchain: nightly
+        toolchain: nightly-2021-01-15
     - uses: Swatinem/rust-cache@v1
     - name: Install diesel
       run: cargo install diesel_cli --no-default-features --features postgres
@@ -45,7 +45,7 @@ jobs:
         DATABASE_URL: postgres://wartid:wartid@localhost/wartid
     - name: Build
       working-directory: ./wartid-server/
-      run: cargo +nightly build --verbose
+      run: cargo build --verbose
     - name: Run tests
       working-directory: ./wartid-server/
-      run: cargo +nightly test --verbose
+      run: cargo test --verbose

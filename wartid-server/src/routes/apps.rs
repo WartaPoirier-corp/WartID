@@ -1,7 +1,7 @@
-use super::prelude::*;
 use rocket::http::RawStr;
 use rocket::request::{FormItems, FormParseError, FromForm};
-use std::ops::Deref;
+
+use super::prelude::*;
 
 #[get("/apps")]
 pub fn list(ctx: PageContext, session: &LoginSession, db: DbConn) -> WartIDResult<Ructe> {

@@ -28,6 +28,8 @@ DATABASE_URL=postgres://username:password@localhost/wartid
 HTTP_BASE_URL=http://localhost:8000/
 ```
 
+Both of the binaries can (and will) load `.env` files in their CWD.
+
 ```
 cd wartid-server
 cargo run --manifest-path ../wartid-server-discord-bot/Cargo.toml &

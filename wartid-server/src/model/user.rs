@@ -1,7 +1,12 @@
-use super::*;
-use crate::schema::users;
 use diesel::{ExpressionMethods, QueryDsl, RunQueryDsl};
 use uuid::Uuid;
+
+#[cfg(feature = "discord_bot")]
+pub use discord_login::{destroy as discord_login_destroy, init as discord_login_init};
+
+use crate::schema::users;
+
+use super::*;
 
 #[derive(Debug, Queryable)]
 pub struct User {
