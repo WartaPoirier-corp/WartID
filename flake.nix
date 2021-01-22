@@ -135,7 +135,7 @@
                 environment = {
                   DISCORD_KEY_FILE = "/tmp/wartid/discord_jwt.key";
                   DATABASE_URL = "postgres://${cfg.db.user}:${cfg.db.password}@localhost/${cfg.db.name}";
-                  HTTP_BASE_URL = "http://localhost:${cfg.port}";
+                  HTTP_BASE_URL = "http://localhost:${builtins.toString cfg.port}";
                 };
                 serviceConfig = {
                   ExecStart = "/${self.packages.${pkgs.system}.wartid-server}/bin/wartid-server";
