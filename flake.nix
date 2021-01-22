@@ -20,8 +20,9 @@
             pname = "wartid-server-discord-bot";
             version = "0.1.0";
             src = ./.;
-            workspace_member = ./wartid-server-discord-bot;
-            cargoSha256 = "sha256-olL7mTcuWQ6d46WIBW8vK3DfsNGbgGBuWQnazALOkk8=";
+            workspace_member = "wartid-server-discord-bot";
+            cargoSha256 = "sha256-HgdJHE1OwKkJu2UC1zBOxuJcfCuUE2i//THo29PrK8c=";
+            buildInputs = with pkgs; [ postgresql ];
             meta = with pkgs.lib; {
               description = "Discord bot WartID authentication";
               homepage = "https://github.com/WartaPoirier-corp/WartID/";
@@ -35,9 +36,10 @@
             pname = "wartid-server";
             version = "0.1.0";
             src = ./.;
-            features = [ "discord-bot" ];
-            workspace_member = ./wartid-server;
-            cargoSha256 = "sha256-olL7mTcuWQ6d46WIBW8vK3DfsNGbgGBuWQnazALOkk8=";
+            workspace_member = "wartid-server";
+            cargoSha256 = "sha256-rIMx0x0i8Uj7AGgxAs3TMXGiQDoHQiA/PFhIq0rsDz4=";
+            cargoBuildFlags = [ "--features" "discord_bot" ];
+            buildInputs = with pkgs; [ postgresql ];
             meta = with pkgs.lib; {
               description = "Discord bot WartID authentication";
               homepage = "https://github.com/WartaPoirier-corp/WartID/";
@@ -136,7 +138,7 @@
                   HTTP_BASE_URL = "http://localhost:${cfg.port}";
                 };
                 serviceConfig = {
-                  ExecStart = "/${pkgs.wartid-server}";
+                  ExecStart = "/${pkgs.wartid-server}/bin/wartid-server";
                   Type = "simple";
                   User = "wartid";
                   Group = "wartid";
@@ -152,7 +154,7 @@
                   DISCORD_ALLOWED_GUILD = concatStringsSep "," (builtins.map builtins.toString cfg.discordAllowedGuilds);
                 };
                 serviceConfig = {
-                  ExecStart = "/${pkgs.wartid-server-discord-bot}";
+                  ExecStart = "/${pkgs.wartid-server-discord-bot}/bin/wartid-server-discord-bot";
                   Type = "simple";
                   User = "wartid";
                   Group = "wartid";
