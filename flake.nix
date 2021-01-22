@@ -138,7 +138,7 @@
                   HTTP_BASE_URL = "http://localhost:${cfg.port}";
                 };
                 serviceConfig = {
-                  ExecStart = "/${pkgs.wartid-server}/bin/wartid-server";
+                  ExecStart = "/${self.packages.${system}.wartid-server}/bin/wartid-server";
                   Type = "simple";
                   User = "wartid";
                   Group = "wartid";
@@ -154,7 +154,7 @@
                   DISCORD_ALLOWED_GUILD = concatStringsSep "," (builtins.map builtins.toString cfg.discordAllowedGuilds);
                 };
                 serviceConfig = {
-                  ExecStart = "/${pkgs.wartid-server-discord-bot}/bin/wartid-server-discord-bot";
+                  ExecStart = "/${self.packages.${system}.wartid-server-discord-bot}/bin/wartid-server-discord-bot";
                   Type = "simple";
                   User = "wartid";
                   Group = "wartid";
