@@ -152,7 +152,7 @@
                 environment = {
                   DISCORD_KEY_FILE = "/tmp/wartid/discord_jwt.key";
                   DISCORD_TOKEN = cfg.discordToken;
-                  DISCORD_ALLOWED_GUILD = concatStringsSep "," (builtins.map builtins.toString cfg.discordAllowedGuilds);
+                  DISCORD_ALLOWED_GUILDS = concatStringsSep "," (builtins.map builtins.toString cfg.discordAllowedGuilds);
                 };
                 serviceConfig = {
                   ExecStart = "/${self.packages.${pkgs.system}.wartid-server-discord-bot}/bin/wartid-server-discord-bot";
