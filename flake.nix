@@ -92,22 +92,22 @@
                   '';
                 };
                 user = mkOption {
-                  type = types.string;
+                  type = types.str;
                   default = "wartid";
                   description = "The database user";
                 };
                 password = mkOption {
-                  type = types.string;
+                  type = types.str;
                   description = "The database password";
                 };
                 name = mkOption {
-                  type = types.string;
+                  type = types.str;
                   default = "wartid";
                   description = "The database name";
                 };
               };
               discordToken = mkOption {
-                type = types.string;
+                type = types.str;
                 description = "The Discord token for the bot.";
               };
               discordAllowedGuilds = mkOption {
