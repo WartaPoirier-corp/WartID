@@ -128,6 +128,7 @@
               users.users.wartid = {
                 group = "wartid";
               };
+              users.groups.wartid = {};
               systemd.services.wartid-server = {
                 description = "WartID server";
                 wantedBy = [ "multi-user.target" ];
