@@ -40,6 +40,9 @@
             cargoSha256 = "sha256-rIMx0x0i8Uj7AGgxAs3TMXGiQDoHQiA/PFhIq0rsDz4=";
             cargoBuildFlags = [ "--features" "discord_bot" ];
             buildInputs = with pkgs; [ postgresql ];
+            postInstall = ''
+              cp -r $src/wartid-server/static/ $out/
+            '';
             meta = with pkgs.lib; {
               description = "Discord bot WartID authentication";
               homepage = "https://github.com/WartaPoirier-corp/WartID/";
@@ -119,6 +122,15 @@
                 default = 7878;
                 description = "HTTP listen port";
               };
+              domain = mkOption {
+                type = types.str;
+                description = "The domain name on which the app is hosted";
+              };
+              enableNginx = mkOption {
+                type = types.bool;
+                default = true;
+                description = "Wheter or not to add a nginx config for WartID";
+              }
             };
 
             config = mkIf cfg.enable {
@@ -136,7 +148,8 @@
                 environment = {
                   DISCORD_KEY_FILE = "/tmp/wartid/discord_jwt.key";
                   DATABASE_URL = "postgres://${cfg.db.user}:${cfg.db.password}@localhost/${cfg.db.name}";
-                  HTTP_BASE_URL = "http://localhost:${builtins.toString cfg.port}";
+                  HTTP_BASE_URL = "https://${cfg.domain}";
+                  ROCKET_PORT = builtins.toString cfg.port;
                 };
                 serviceConfig = {
                   ExecStart = "/${self.packages.${pkgs.system}.wartid-server}/bin/wartid-server";
@@ -153,12 +166,22 @@
                   DISCORD_KEY_FILE = "/tmp/wartid/discord_jwt.key";
                   DISCORD_TOKEN = cfg.discordToken;
                   DISCORD_ALLOWED_GUILDS = concatStringsSep "," (builtins.map builtins.toString cfg.discordAllowedGuilds);
+                  HTTP_BASE_URL = "https://${cfg.domain}";
                 };
                 serviceConfig = {
                   ExecStart = "/${self.packages.${pkgs.system}.wartid-server-discord-bot}/bin/wartid-server-discord-bot";
                   Type = "simple";
                   User = "wartid";
                   Group = "wartid";
+                };
+              };
+
+              nginx.virtualHosts."${cfg.domain}" = mkIf cfg.enableNginx {
+                enableACME = true;
+                forceSSL = true;
+                root = "${self.packages.${pkgs.system}.wartid-server}";
+                locations."/" = {
+                  proxyPass = "http://localhost:${builtins.toString cfg.port}";
                 };
               };
             };
