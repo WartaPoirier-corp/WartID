@@ -176,7 +176,7 @@
                 };
               };
 
-              nginx.virtualHosts."${cfg.domain}" = mkIf cfg.enableNginx {
+              services.nginx.virtualHosts."${cfg.domain}" = mkIf cfg.enableNginx {
                 enableACME = true;
                 forceSSL = true;
                 root = "${self.packages.${pkgs.system}.wartid-server}";
