@@ -137,7 +137,7 @@ impl EventHandler for Handler {
                             random_of(&[
                                 "Il expire dans 10 min",
                                 "Tu as 10 min 🕑",
-                                "Mes pouvoirs ne me permettent pas de conjurer un code durant plus de 10 min, dépêche toi !",
+                                "Mes pouvoirs ne me permettent pas d'invoquer un code durant plus de 10 min, dépêche toi !",
                                 "🔥 Go 🚶 go 🏁 go 🏁, tu as 1️0️ min avant 💥 l'autodestruction 💣 de ton code 🔐",
                             ]),
                         )
