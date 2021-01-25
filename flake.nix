@@ -145,7 +145,6 @@
                   DISCORD_KEY_FILE = "/tmp/wartid/discord_jwt.key";
                   DATABASE_URL = "postgres://${cfg.db.user}:${cfg.db.password}@localhost/${cfg.db.name}";
                   HTTP_BASE_URL = "https://${cfg.domain}";
-                  ROCKET_PORT = builtins.toString cfg.port;
                 };
                 serviceConfig = {
                   PreStart = "${pkgs.diesel-cli}/bin/diesel migration run --migration-dir ${self.packages.${pkgs.system}.wartid-server}/migrations";
