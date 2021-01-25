@@ -18,6 +18,7 @@ Variables:
 ```dotenv
 # Both
 DISCORD_KEY_FILE=discord_jwt.key
+HTTP_BASE_URL=http://localhost:8000/
 
 # Discord bot
 DISCORD_TOKEN=...
@@ -25,7 +26,6 @@ DISCORD_ALLOWED_GUILDS=012345678901234567
 
 # Server
 DATABASE_URL=postgres://username:password@localhost/wartid
-HTTP_BASE_URL=http://localhost:8000/
 ```
 
 Both of the binaries can (and will) load `.env` files in their CWD.

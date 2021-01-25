@@ -113,6 +113,15 @@ impl EventHandler for Handler {
         {
             let typing = Typing::start(ctx.http.clone(), private.id.0);
 
+            // TODO Optimize
+            let url = {
+                let mut var = std::env::var("HTTP_BASE_URL").expect("no HTTP_BASE_URL set");
+                if !var.ends_with('/') {
+                    var.push('/')
+                }
+                var
+            };
+
             let jwt = encode(received_message.author.id, received_message.author.name).await;
 
             match jwt {
@@ -121,8 +130,8 @@ impl EventHandler for Handler {
                         format!(
                             "{} (le nom d'utilisateur reste vide) `{}`\n{}",
                             random_of(&[
-                                "Rends toi sur https://profile.wp-corp.eu.org/login et entre le code suivant **comme mot de passe**",
-                                "Il faut maintenant rentrer ton code de connection **comme mot de passe** sur https://profile.wp-corp.eu.org/login",
+                                &format!("Rends toi sur {} et entre le code suivant **comme mot de passe**", &url),
+                                &format!("Il faut maintenant rentrer ton code de connection **comme mot de passe** sur {}", &url),
                             ]),
                             jwt,
                             random_of(&[
