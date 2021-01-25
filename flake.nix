@@ -148,7 +148,7 @@
                   ROCKET_PORT = builtins.toString cfg.port;
                 };
                 serviceConfig = {
-                  PreStart = "${pkgs.diesel-cli}/bin/diesel migration run --migration-dir ${self.packages.${pkgs.system}.wartid-server}/migrations"
+                  PreStart = "${pkgs.diesel-cli}/bin/diesel migration run --migration-dir ${self.packages.${pkgs.system}.wartid-server}/migrations";
                   ExecStart = "${self.packages.${pkgs.system}.wartid-server}/bin/wartid-server";
                   Type = "simple";
                   User = "wartid";
