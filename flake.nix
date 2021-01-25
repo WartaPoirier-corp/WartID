@@ -42,6 +42,7 @@
             buildInputs = with pkgs; [ postgresql ];
             postInstall = ''
               cp -r $src/wartid-server/static/ $out/
+              cp -r $src/wartid-server/migrations/ $out/
             '';
             meta = with pkgs.lib; {
               description = "Discord bot WartID authentication";
@@ -117,11 +118,6 @@
                 type = types.listOf types.int;
                 description = "Snowflake IDs of Guilds the bot accepts people from.";
               };
-              port = mkOption {
-                type = types.int;
-                default = 7878;
-                description = "HTTP listen port";
-              };
               domain = mkOption {
                 type = types.str;
                 description = "The domain name on which the app is hosted";
@@ -152,7 +148,8 @@
                   ROCKET_PORT = builtins.toString cfg.port;
                 };
                 serviceConfig = {
-                  ExecStart = "/${self.packages.${pkgs.system}.wartid-server}/bin/wartid-server";
+                  PreStart = "${pkgs.diesel-cli}/bin/diesel migration run --migration-dir ${self.packages.${pkgs.system}.wartid-server}/migrations"
+                  ExecStart = "${self.packages.${pkgs.system}.wartid-server}/bin/wartid-server";
                   Type = "simple";
                   User = "wartid";
                   Group = "wartid";
@@ -180,8 +177,13 @@
                 enableACME = true;
                 forceSSL = true;
                 root = "${self.packages.${pkgs.system}.wartid-server}";
-                locations."/" = {
-                  proxyPass = "http://localhost:${builtins.toString cfg.port}";
+                locations = {
+                  "/static/" = {
+                    alias = "${self.packages.${pkgs.system}.wartid-server}/static/";
+                  };
+                  "/" = {
+                    proxyPass = "http://localhost:8000";
+                  };
                 };
               };
             };
