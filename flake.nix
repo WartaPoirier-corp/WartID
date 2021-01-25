@@ -130,7 +130,7 @@
                 type = types.bool;
                 default = true;
                 description = "Wheter or not to add a nginx config for WartID";
-              }
+              };
             };
 
             config = mkIf cfg.enable {
