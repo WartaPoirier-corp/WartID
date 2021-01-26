@@ -361,11 +361,17 @@ fn main() {
                 routes::users::view_me,
                 routes::users::view_update,
                 login,
-                login_with_discord,
                 login_post,
                 logout,
             ],
         )
+        .mount("/", {
+            #[cfg(feature = "discord_bot")]
+            let routes = routes![login_with_discord];
+            #[cfg(not(feature = "discord_bot"))]
+            let routes = routes![];
+            routes
+        })
         .launch();
 }
 

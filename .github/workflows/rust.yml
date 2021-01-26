@@ -29,23 +29,26 @@ jobs:
           - 5432:5432
 
     steps:
-    - name: Test DB, install uuid-ossp, and interrupt action if it doesn't work
-      run: psql postgres://wartid:wartid@localhost/wartid --command='create extension "uuid-ossp";'
-    - uses: actions/checkout@v2
-    - uses: actions-rs/toolchain@v1
-      with:
-        toolchain: nightly-2021-01-15
-    - uses: Swatinem/rust-cache@v1
-    - name: Install diesel
-      run: cargo install diesel_cli --no-default-features --features postgres
-    - name: Apply migrations
-      working-directory: ./wartid-server/
-      run: diesel migration run
-      env:
-        DATABASE_URL: postgres://wartid:wartid@localhost/wartid
-    - name: Build
-      working-directory: ./wartid-server/
-      run: cargo build --verbose
-    - name: Run tests
-      working-directory: ./wartid-server/
-      run: cargo test --verbose
+      - name: Test DB, install uuid-ossp, and interrupt action if it doesn't work
+        run: psql postgres://wartid:wartid@localhost/wartid --command='create extension "uuid-ossp";'
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: nightly-2021-01-15
+      - uses: Swatinem/rust-cache@v1
+      - name: Install diesel
+        run: cargo install diesel_cli --no-default-features --features postgres
+      - name: Apply migrations
+        working-directory: ./wartid-server/
+        run: diesel migration run
+        env:
+          DATABASE_URL: postgres://wartid:wartid@localhost/wartid
+      - name: Build --all-features
+        working-directory: ./wartid-server/
+        run: cargo build --all-features --verbose
+      - name: Build --no-default-features
+        working-directory: ./wartid-server/
+        run: cargo build --no-default-features --verbose
+      - name: Run tests
+        working-directory: ./wartid-server/
+        run: cargo test --verbose

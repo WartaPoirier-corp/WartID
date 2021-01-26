@@ -1,4 +1,5 @@
 use std::env;
+#[cfg(feature = "discord_bot")]
 use std::path::{Path, PathBuf};
 
 #[derive(Debug)]

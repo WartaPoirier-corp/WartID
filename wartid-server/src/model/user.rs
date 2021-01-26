@@ -50,6 +50,7 @@ impl User {
             .next())
     }
 
+    #[cfg(feature = "discord_bot")]
     fn find_or_create_by_discord_id(
         db: crate::DbConnection,
         l_discord_id: u64,
