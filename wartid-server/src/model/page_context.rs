@@ -1,19 +1,21 @@
-use super::*;
 use std::borrow::Cow;
+
 use uuid::Uuid;
+
+use super::*;
 
 pub enum FlashMessage {}
 
 pub struct PageContext {
-    pub users: Vec<(Uuid, String)>,
-    pub apps: Vec<(Uuid, String)>,
+    pub users: Vec<(UserId, String)>,
+    pub apps: Vec<(UserAppId, String)>,
 
     pub flash_bad_request: bool,
     pub flash_messages: Vec<(Cow<'static, str>, bool)>,
 }
 
 impl PageContext {
-    pub fn new(db: crate::DbConnection, user_id: Uuid) -> WartIDResult<Self> {
+    pub fn new(db: crate::DbConnection, user_id: UserId) -> WartIDResult<Self> {
         Ok(Self {
             users: User::find_all(db, false)?
                 .into_iter()

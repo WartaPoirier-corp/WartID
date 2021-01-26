@@ -4,17 +4,19 @@ use uuid::Uuid;
 
 use crate::schema::sessions;
 
-use super::WartIDResult;
+use super::*;
+
+crate::def_id!(pub struct SessionId);
 
 #[derive(Debug, Queryable)]
 pub struct Session {
-    pub id: Uuid,
-    pub users_id: Uuid,
+    pub id: SessionId,
+    pub users_id: UserId,
     pub expiration: NaiveDateTime,
 }
 
 impl Session {
-    pub fn insert(db: crate::DbConnection, new: NewSession) -> WartIDResult<Uuid> {
+    pub fn insert(db: crate::DbConnection, new: NewSession) -> WartIDResult<SessionId> {
         use crate::schema::sessions::dsl::*;
 
         let session: Session = diesel::insert_into(sessions).values(new).get_result(db)?;
@@ -22,8 +24,7 @@ impl Session {
         Ok(session.id)
     }
 
-    /// Returns the UUID of the user corresponding to this session ID
-    pub fn find_by_id(db: crate::DbConnection, l_id: Uuid) -> WartIDResult<Option<Uuid>> {
+    pub fn find_by_id(db: crate::DbConnection, l_id: Uuid) -> WartIDResult<Option<UserId>> {
         use crate::schema::sessions::dsl::*;
 
         Ok(sessions
@@ -39,14 +40,14 @@ impl Session {
 #[derive(Insertable)]
 #[table_name = "sessions"]
 pub struct NewSession {
-    pub users_id: Uuid,
+    pub users_id: UserId,
     pub expiration: NaiveDateTime,
 }
 
 impl NewSession {
-    pub fn new(account: Uuid) -> Self {
+    pub fn new(user_id: UserId) -> Self {
         NewSession {
-            users_id: account,
+            users_id: user_id,
             expiration: Utc::now().naive_utc() + Duration::days(14),
         }
     }

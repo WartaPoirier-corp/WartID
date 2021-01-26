@@ -8,9 +8,11 @@ use crate::schema::users;
 
 use super::*;
 
+crate::def_id!(pub struct UserId);
+
 #[derive(Debug, Queryable)]
 pub struct User {
-    pub id: Uuid,
+    pub id: UserId,
     pub username: String,
     pub password: Option<String>,
     pub email: Option<String>,
@@ -37,7 +39,7 @@ impl User {
         .map_err(Into::into)
     }
 
-    pub fn find_by_id(db: crate::DbConnection, l_id: Uuid) -> WartIDResult<Option<User>> {
+    pub fn find_by_id(db: crate::DbConnection, l_id: UserId) -> WartIDResult<Option<User>> {
         use crate::schema::users::dsl::*;
 
         Ok(users
@@ -111,13 +113,13 @@ impl User {
 
     pub fn update_username(
         db: crate::DbConnection,
-        user: Uuid,
+        user_id: UserId,
         new_username: &str,
     ) -> WartIDResult<User> {
         use crate::schema::users::dsl::*;
 
         diesel::update(users)
-            .filter(id.eq(user))
+            .filter(id.eq(user_id))
             .set(username.eq(new_username))
             .get_result(db)
             .map_err(Into::into)
@@ -125,13 +127,13 @@ impl User {
 
     pub fn update_email(
         db: crate::DbConnection,
-        user: Uuid,
+        user_id: UserId,
         new_email: &str,
     ) -> WartIDResult<User> {
         use crate::schema::users::dsl::*;
 
         diesel::update(users)
-            .filter(id.eq(user))
+            .filter(id.eq(user_id))
             .set(email.eq(new_email))
             .get_result(db)
             .map_err(Into::into)
@@ -139,7 +141,7 @@ impl User {
 
     pub fn update_password(
         db: crate::DbConnection,
-        user: Uuid,
+        user_id: UserId,
         new_password: &str,
     ) -> WartIDResult<User> {
         use crate::schema::users::dsl::*;
@@ -163,7 +165,7 @@ impl User {
         };
 
         diesel::update(users)
-            .filter(id.eq(user))
+            .filter(id.eq(user_id))
             .set(password.eq(new_password))
             .get_result(db)
             .map_err(Into::into)

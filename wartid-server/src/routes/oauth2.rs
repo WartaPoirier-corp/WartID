@@ -1,12 +1,15 @@
-use super::prelude::*;
-use crate::utils::jwt::JWT;
+use std::borrow::Cow;
+
 use rocket::http::uri::Origin;
 use rocket::http::{RawStr, Status};
 use rocket::request::{FormParseError, FromFormValue, FromRequest};
 use rocket::request::{FromForm, Outcome};
 use rocket::Request;
 use rocket_contrib::json::Json;
-use std::borrow::Cow;
+
+use crate::utils::jwt::JWT;
+
+use super::prelude::*;
 
 impl<'v> FromFormValue<'v> for OAuth2Scopes {
     type Error = ();
@@ -19,10 +22,10 @@ impl<'v> FromFormValue<'v> for OAuth2Scopes {
 #[derive(serde::Deserialize, serde::Serialize)]
 struct AuthorizeState<Str, O2S> {
     #[serde(rename = "aud")]
-    client: Uuid,
+    client: UserAppId,
 
     #[serde(rename = "sub")]
-    user: Uuid,
+    user: UserId,
 
     /// Scopes granted by the user. When requesting access tokens later, the access tokens will only
     /// be able to request a subset of these scopes.
@@ -35,10 +38,10 @@ struct AuthorizeState<Str, O2S> {
 #[derive(serde::Deserialize, serde::Serialize)]
 struct AccessState {
     #[serde(rename = "aud")]
-    client: Uuid,
+    client: UserAppId,
 
     #[serde(rename = "sub")]
-    user: Uuid,
+    user: UserId,
 
     scopes: OAuth2Scopes,
 }
@@ -68,7 +71,7 @@ impl<'v> FromFormValue<'v> for AuthorizeResponseType {
 
 #[derive(FromForm, Debug)]
 pub struct AuthorizeQuery<'a> {
-    client_id: UuidParam,
+    client_id: UserAppId,
     redirect_uri: String,
     scope: Option<OAuth2Scopes>,
     response_type: AuthorizeResponseType,
@@ -112,7 +115,7 @@ pub fn authorize(
             if let Some(session) = session {
                 let redirect_uri = &authorize.redirect_uri;
 
-                let app = UserApp::find_by_id(&db, *authorize.client_id)?
+                let app = UserApp::find_by_id(&db, authorize.client_id)?
                     .filter(|app| app.oauth2().is_some())
                     .ok_or(WartIDError::OAuth2Error("client not found"))?;
 
@@ -382,7 +385,7 @@ pub fn token(
 
 #[derive(serde::Serialize)]
 pub struct UserInfo {
-    sub: Uuid,
+    sub: UserId,
     name: String,
 
     #[serde(skip_serializing_if = "Option::is_none")]

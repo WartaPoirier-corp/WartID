@@ -1,9 +1,6 @@
-mod app;
-mod oauth2session;
-mod page_context;
-mod scopes;
-mod session;
-mod user;
+use std::fmt::Debug;
+
+use diesel::result::Error;
 
 pub use app::*;
 pub use oauth2session::*;
@@ -12,8 +9,12 @@ pub use scopes::*;
 pub use session::*;
 pub use user::*;
 
-use diesel::result::Error;
-use std::fmt::Debug;
+mod app;
+mod oauth2session;
+mod page_context;
+mod scopes;
+mod session;
+mod user;
 
 pub type WartIDResult<T> = Result<T, WartIDError>;
 

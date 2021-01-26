@@ -6,9 +6,7 @@ pub mod users;
 mod prelude {
     pub use std::borrow::Cow;
 
-    use rocket::http::RawStr;
     pub use rocket::request::Form;
-    use rocket::request::{FromFormValue, FromParam};
     pub use rocket::response::Redirect;
     pub use uuid::Uuid;
 
@@ -16,32 +14,4 @@ mod prelude {
     pub use crate::ructe::*;
     pub use crate::DbConn;
     pub use crate::LoginSession;
-
-    #[derive(Debug)]
-    pub struct UuidParam(Uuid);
-
-    impl std::ops::Deref for UuidParam {
-        type Target = Uuid;
-
-        #[inline]
-        fn deref(&self) -> &Self::Target {
-            &self.0
-        }
-    }
-
-    impl<'a> FromParam<'a> for UuidParam {
-        type Error = uuid::Error;
-
-        fn from_param(param: &'a RawStr) -> Result<Self, Self::Error> {
-            param.parse().map(UuidParam)
-        }
-    }
-
-    impl<'a> FromFormValue<'a> for UuidParam {
-        type Error = uuid::Error;
-
-        fn from_form_value(form_value: &'a RawStr) -> Result<Self, Self::Error> {
-            form_value.parse().map(UuidParam)
-        }
-    }
 }

@@ -2,17 +2,18 @@ use diesel::expression::exists::exists;
 use diesel::{
     BoolExpressionMethods, Connection, ExpressionMethods, QueryDsl, Queryable, RunQueryDsl,
 };
-use uuid::Uuid;
 
 use crate::schema::{user_apps, user_apps_managers};
 
 use super::*;
 
+crate::def_id!(pub struct UserAppId);
+
 type OAuthSecret = String;
 
 #[derive(Queryable)]
 pub struct UserApp {
-    pub id: Uuid,
+    pub id: UserAppId,
     pub name: String,
     oauth_secret: Option<OAuthSecret>,
     pub oauth_redirect: String,
@@ -38,14 +39,14 @@ impl UserApp {
         db: crate::DbConnection,
         l_name: String,
         l_hidden: bool,
-        creator: Uuid,
-    ) -> WartIDResult<Uuid> {
+        creator: UserId,
+    ) -> WartIDResult<UserAppId> {
         use crate::schema::user_apps::dsl::*;
         use crate::schema::user_apps_managers::dsl::*;
 
         // Insertions are done in a transaction so if the second one fails, the first one should in
         // theory be rolled back. Else, we would end up with an orphan app.
-        db.transaction::<Uuid, WartIDError, _>(|| {
+        db.transaction::<UserAppId, WartIDError, _>(|| {
             let app_id = diesel::insert_into(user_apps)
                 .values(NewUserApp {
                     name: l_name,
@@ -65,7 +66,7 @@ impl UserApp {
         })
     }
 
-    pub fn find_all(db: crate::DbConnection, view_as: Uuid) -> WartIDResult<Vec<Self>> {
+    pub fn find_all(db: crate::DbConnection, view_as: UserId) -> WartIDResult<Vec<Self>> {
         use crate::schema::user_apps::dsl::*;
         use crate::schema::user_apps_managers::dsl::*;
 
@@ -77,7 +78,7 @@ impl UserApp {
             .map_err(Into::into)
     }
 
-    pub fn find_by_id(db: crate::DbConnection, l_app_id: Uuid) -> WartIDResult<Option<Self>> {
+    pub fn find_by_id(db: crate::DbConnection, l_app_id: UserAppId) -> WartIDResult<Option<Self>> {
         use crate::schema::user_apps::dsl::*;
 
         // TODO honor "hidden"
@@ -89,7 +90,7 @@ impl UserApp {
         }
     }
 
-    pub fn set_oauth(db: crate::DbConnection, app: Uuid, enable: bool) -> WartIDResult<Self> {
+    pub fn set_oauth(db: crate::DbConnection, app: UserAppId, enable: bool) -> WartIDResult<Self> {
         use crate::schema::user_apps::dsl::*;
 
         diesel::update(user_apps)
@@ -105,7 +106,7 @@ impl UserApp {
 
     pub fn set_oauth_redirect_uri(
         db: crate::DbConnection,
-        app: Uuid,
+        app: UserAppId,
         uri: String,
     ) -> WartIDResult<Self> {
         use crate::schema::user_apps::dsl::*;
@@ -119,7 +120,7 @@ impl UserApp {
 
     pub fn set_name_description(
         db: crate::DbConnection,
-        app: Uuid,
+        app: UserAppId,
         l_name: &str,
         l_description: &str,
     ) -> WartIDResult<Self> {
@@ -143,6 +144,6 @@ struct NewUserApp {
 #[derive(Insertable)]
 #[table_name = "user_apps_managers"]
 struct NewUserAppManager {
-    user_apps_id: Uuid,
-    users_id: Uuid,
+    user_apps_id: UserAppId,
+    users_id: UserId,
 }

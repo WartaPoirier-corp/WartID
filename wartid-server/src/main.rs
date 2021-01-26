@@ -28,6 +28,9 @@ use crate::model::{WartIDError, WartIDResult};
 use crate::ructe::Ructe;
 
 #[macro_use]
+mod id;
+
+#[macro_use]
 mod ructe;
 mod config;
 mod model;

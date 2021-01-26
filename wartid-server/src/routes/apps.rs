@@ -30,8 +30,8 @@ fn view_render(ctx: PageContext, app: UserApp) -> WartIDResult<Option<Ructe>> {
 }
 
 #[get("/apps/<app_id>")]
-pub fn view(ctx: PageContext, db: DbConn, app_id: UuidParam) -> WartIDResult<Option<Ructe>> {
-    let app = match UserApp::find_by_id(&db, *app_id)? {
+pub fn view(ctx: PageContext, db: DbConn, app_id: UserAppId) -> WartIDResult<Option<Ructe>> {
+    let app = match UserApp::find_by_id(&db, app_id)? {
         Some(app) => app,
         None => return Ok(None),
     };
@@ -115,11 +115,9 @@ impl<'a> FromForm<'a> for FormUpdateIntent {
 pub fn view_update(
     mut ctx: PageContext,
     db: DbConn,
-    app_id: UuidParam,
+    app_id: UserAppId,
     data: Form<FormUpdateIntent>,
 ) -> WartIDResult<Option<Ructe>> {
-    let app_id = *app_id;
-
     let (app, success_message) = match data.into_inner() {
         FormUpdateIntent::UpdateGeneral { name, description } => {
             if name.len() < 3 {

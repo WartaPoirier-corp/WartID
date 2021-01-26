@@ -1,9 +1,10 @@
-use super::prelude::*;
 use rocket::http::RawStr;
 use rocket::request::{FormItems, FormParseError, FromForm, FromParam};
 use uuid::Error;
 
-pub struct UuidParamWithAt(UuidParam);
+use super::prelude::*;
+
+pub struct UuidParamWithAt(UserId);
 
 #[derive(Debug)]
 pub enum UuidParamWithAtError {
@@ -22,7 +23,7 @@ impl<'a> FromParam<'a> for UuidParamWithAt {
 
     fn from_param(param: &'a RawStr) -> Result<Self, Self::Error> {
         if let Some(param) = param.strip_prefix('@') {
-            Ok(UuidParamWithAt(UuidParam::from_param(param.into())?))
+            Ok(UuidParamWithAt(UserId::from_param(param.into())?))
         } else {
             Err(UuidParamWithAtError::NoAtSymbol)
         }
@@ -41,7 +42,7 @@ pub fn view(
     db: DbConn,
     user_id: UuidParamWithAt,
 ) -> WartIDResult<Option<Ructe>> {
-    let user_id = *user_id.0;
+    let user_id = user_id.0;
 
     let user = match User::find_by_id(&*db, user_id) {
         Ok(Some(user)) => user,
@@ -120,7 +121,7 @@ pub fn view_update(
     user_id: UuidParamWithAt,
     data: Form<FormUpdateIntent>,
 ) -> WartIDResult<Ructe> {
-    let user_id = *user_id.0;
+    let user_id = user_id.0;
 
     if user_id != session.user.id {
         return Err(WartIDError::InvalidCredentials(String::from(

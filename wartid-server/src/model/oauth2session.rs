@@ -1,17 +1,19 @@
-use super::WartIDResult;
-use super::*;
-use crate::model::OAuth2Scopes;
-use crate::schema::sessions_oauth2;
 use chrono::{Duration, NaiveDateTime, Utc};
 use diesel::{BoolExpressionMethods, ExpressionMethods, QueryDsl, RunQueryDsl};
 use uuid::Uuid;
+
+use crate::model::OAuth2Scopes;
+use crate::schema::sessions_oauth2;
+
+use super::WartIDResult;
+use super::*;
 
 #[derive(Debug, Queryable, Insertable, AsChangeset)]
 #[table_name = "sessions_oauth2"]
 pub struct OAuth2Session {
     pub token: String,
-    pub users_id: Uuid,
-    pub user_apps_id: Uuid,
+    pub users_id: UserId,
+    pub user_apps_id: UserAppId,
     pub initial_scopes: String,
     pub expiration: NaiveDateTime,
 }
@@ -20,8 +22,8 @@ pub struct OAuth2Session {
 #[table_name = "sessions_oauth2"]
 pub struct NewOAuth2Session<'a> {
     pub token: &'a str,
-    pub users_id: Uuid,
-    pub user_apps_id: Uuid,
+    pub users_id: UserId,
+    pub user_apps_id: UserAppId,
     pub initial_scopes: &'a str,
     pub expiration: NaiveDateTime,
 }
@@ -29,8 +31,8 @@ pub struct NewOAuth2Session<'a> {
 impl OAuth2Session {
     pub fn insert_or_refresh(
         db: crate::DbConnection,
-        user: Uuid,
-        app: Uuid,
+        user: UserId,
+        app: UserAppId,
         scopes: &OAuth2Scopes,
     ) -> WartIDResult<String> {
         use crate::schema::sessions_oauth2::dsl::*;
