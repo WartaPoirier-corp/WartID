@@ -6,31 +6,34 @@
 )]
 
 #[macro_use]
-mod ructe;
-mod config;
-mod model;
-mod routes;
-mod schema;
-mod utils;
-
-#[macro_use]
 extern crate diesel;
 #[macro_use]
 extern crate rocket;
 #[macro_use]
 extern crate rocket_contrib;
 
-use crate::config::Config;
-use crate::model::{WartIDError, WartIDResult};
-use crate::ructe::Ructe;
+use std::borrow::Cow;
+use std::path::{Path, PathBuf};
+
 use rocket::config::{ConfigBuilder, Environment};
 use rocket::http::{Cookie, Cookies, RawStr, Status};
 use rocket::request::{Form, FromForm, FromRequest, Outcome};
-use rocket::response::status::NotFound;
-use rocket::response::{NamedFile, Redirect};
+use rocket::response::status::{NotFound, Unauthorized};
+use rocket::response::{NamedFile, Redirect, Responder};
 use rocket::Request;
-use std::path::{Path, PathBuf};
 use uuid::Uuid;
+
+use crate::config::Config;
+use crate::model::{WartIDError, WartIDResult};
+use crate::ructe::Ructe;
+
+#[macro_use]
+mod ructe;
+mod config;
+mod model;
+mod routes;
+mod schema;
+mod utils;
 
 /// Ructe's parser is really bad and won't let us use "complex" types (that is, types with `<>`,
 /// `::`, `[]`, etc. in their syntax), so I'm type-def-ing aliases here.
@@ -184,6 +187,71 @@ pub fn login(
     Ok(render!(login::login()))
 }
 
+pub struct DoLoginResponse {
+    pub user: crate::model::User,
+    pub redirect_to: Option<String>,
+}
+
+impl<'r> Responder<'r> for DoLoginResponse {
+    fn respond_to(self, request: &Request<'_>) -> rocket::response::Result<'r> {
+        let db: DbConn = match request.guard() {
+            Outcome::Success(x) => x,
+            Outcome::Forward(_) => unimplemented!(),
+            Outcome::Failure(_) => return WartIDError::DatabaseConnection.respond_to(request),
+        };
+
+        let mut cookies: Cookies = request.guard().expect("cannot get cookies");
+
+        let session_id = match model::Session::insert(&db, model::NewSession::new(self.user.id)) {
+            Ok(x) => x,
+            Err(err) => return err.respond_to(request),
+        };
+
+        cookies.add(
+            Cookie::build("login_session", session_id.to_string())
+                .max_age(time::Duration::days(14))
+                .finish(),
+        );
+
+        Redirect::to(
+            self.redirect_to
+                .unwrap_or_else(|| String::from("/@me"))
+                .as_str()
+                .to_string(),
+        )
+        .respond_to(request)
+    }
+}
+
+#[cfg(feature = "discord_bot")]
+#[get("/login-with-discord?<token>")]
+pub fn login_with_discord(
+    db: DbConn,
+    token: &RawStr,
+) -> Result<DoLoginResponse, Result<Unauthorized<Cow<'static, str>>, WartIDError>> {
+    let user = match model::User::attempt_login(&db, "", token.as_str()) {
+        Ok(Some(user)) => user,
+        // 😓
+        Ok(None) => {
+            return Err(Ok(Unauthorized(Some(Cow::Borrowed(
+                "Impossible de créer un compte utilisateur.",
+            )))))
+        }
+        Err(WartIDError::InvalidCredentials(msg)) => {
+            return Err(Ok(Unauthorized(Some(Cow::Owned(format!(
+                "Jeton invalide, a-t-il expiré ? Message d'erreur: {}",
+                msg
+            ))))))
+        }
+        Err(other) => return Err(Err(other)),
+    };
+
+    Ok(DoLoginResponse {
+        user,
+        redirect_to: None,
+    })
+}
+
 #[derive(FromForm)]
 struct LoginCredentials<'a> {
     username: &'a RawStr,
@@ -290,6 +358,7 @@ fn main() {
                 routes::users::view_me,
                 routes::users::view_update,
                 login,
+                login_with_discord,
                 login_post,
                 logout,
             ],

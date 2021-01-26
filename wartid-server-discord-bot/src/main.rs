@@ -99,6 +99,7 @@ impl EventHandler for Handler {
                     "Vas donc voir tes DM (c'est un URL de connection privé, je ne vais pas te l'envoyer ici)",
                     "J'aime pas trop le concept d'envoyer un URL de connection en public, regarde tes DM <:CRONCHE:754810929748901998>",
                     "Je t'ai envoyé un URL de connection PRIVÉ en DM. La prochaine fois demande le moi directement en pv <:trokoul_pulseur:637313805197639690>",
+                    "Je viens de te glisser un petit MP doux 😏 avec ton code grrrhh",
                 ]),
             ).await;
         }
@@ -113,32 +114,33 @@ impl EventHandler for Handler {
         {
             let typing = Typing::start(ctx.http.clone(), private.id.0);
 
-            // TODO Optimize
-            let url = {
-                let mut var = std::env::var("HTTP_BASE_URL").expect("no HTTP_BASE_URL set");
-                if !var.ends_with('/') {
-                    var.push('/')
-                }
-                var
-            };
-
             let jwt = encode(received_message.author.id, received_message.author.name).await;
 
             match jwt {
                 Ok(jwt) => {
+                    // TODO Optimize
+                    let url = {
+                        let mut var = std::env::var("HTTP_BASE_URL").expect("no HTTP_BASE_URL set");
+                        if !var.ends_with('/') {
+                            var.push('/')
+                        }
+                        var.push_str("login-with-discord?token=");
+                        var.push_str(&jwt);
+                        var
+                    };
+
                     private.send_message(&ctx, |m| m.content(
                         format!(
-                            "{} (le nom d'utilisateur reste vide) `{}`\n{}",
+                            "{}\n{}",
                             random_of(&[
-                                &format!("Rends toi sur {} et entre le code suivant **comme mot de passe**", &url),
-                                &format!("Il faut maintenant rentrer ton code de connection **comme mot de passe** sur {}", &url),
+                                &format!("Rends toi sur {} pour te connecter à WartID (attention, ça va aller vite)", &url),
+                                &format!("Il faut maintenant suivre ce lien pour t'identifier sur WartID: {}", &url),
                             ]),
-                            jwt,
                             random_of(&[
-                                "Il expire dans 10 min",
+                                "Le lien expire dans 10 min",
                                 "Tu as 10 min 🕑",
-                                "Mes pouvoirs ne me permettent pas d'invoquer un code durant plus de 10 min, dépêche toi !",
-                                "🔥 Go 🚶 go 🏁 go 🏁, tu as 1️0️ min avant 💥 l'autodestruction 💣 de ton code 🔐",
+                                "Mes pouvoirs ne me permettent pas d'invoquer un lien durant plus de 10 min, dépêche toi !",
+                                "🔥 Go 🚶 go 🏁 go 🏁, tu as 1️0️ min avant 💥 l'autodestruction 💣 de ton lien 🔐",
                             ]),
                         )
                     )).await;
