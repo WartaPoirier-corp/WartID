@@ -1,0 +1,32 @@
+@use crate::model::PageContext;
+
+@(ctx: &PageContext)
+
+<ul class="tree-view">
+    <li><a href="/home">Accueil</a></li>
+    <li>
+        <details open>
+            <summary>Comptes</summary>
+            <ul>
+                @for (user_id, user_name) in &ctx.users {
+                <li><a href="/@@@user_id">@user_name</a></li>
+                }
+            </ul>
+        </details>
+    </li>
+    <li>
+        <details>
+            <summary><a href="/apps">WartApps</a></summary>
+            <ul>
+                @for (app_id, app_name) in &ctx.apps {
+                <li><a href="/apps/@app_id">@app_name</a></li>
+                }
+                <li><a href="/apps#new">+</a></li>
+            </ul>
+        </details>
+    </li>
+</ul>
+
+<form action="/logout" method="post" style="margin-top: 1em;">
+    <button>Déconnexion</button>
+</form>

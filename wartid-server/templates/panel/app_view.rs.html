@@ -1,0 +1,65 @@
+@use crate::model::PageContext;
+@use crate::model::UserApp;
+@use crate::templates::base;
+
+@(ctx: &PageContext, app: &UserApp)
+
+@:base(&app.name, ctx, {
+<div class="window" style="max-width: 500px;">
+    <div class="title-bar">
+        <div class="title-bar-text">@app.name</div>
+        <div class="title-bar-controls">
+            <button disabled aria-label="Minimize"></button>
+            <button disabled aria-label="Maximize"></button>
+            <button disabled aria-label="Close"></button>
+        </div>
+    </div>
+    <div class="window-body">
+        <fieldset>
+            <legend>Informations générales</legend>
+
+            <form method="post">
+                <div class="field-row">
+                    <label for="name">Nom:</label>
+                    <input type="text" name="name" id="name" placeholder="le taro" value="@app.name"/>
+                </div>
+                <div class="field-row">
+                    <label for="description">Description:</label>
+                    <textarea name="description" id="description" placeholder="le taro">@app.description.as_deref().unwrap_or_default()</textarea>
+                </div>
+                <button name="update-general" class="target-button">Mettre à jour</button>
+            </form>
+        </fieldset>
+
+        <fieldset>
+            <legend>OAuth2</legend>
+
+            @if let Some((secret, _uri)) = &app.oauth2() {
+            <div class="field-row">
+                <label for="oauth-secret">Secret OAuth:</label>
+                <input id="oauth-secret" disabled value="@secret"/>
+                <form method="post">
+                    <button name="oauth-enable" class="target-button">Regénérer le secret OAuth2</button>
+                </form>
+            </div>
+            <div class="field-row">
+                <form method="post">
+                    <label for="oauth-redirect">URI de redirection autorisé:</label>
+                    <input type="url" name="oauth-redirect" id="oauth-redirect" value="@app.oauth_redirect"/>
+                    <button name="oauth-update-redirect" class="target-button">Mettre à jour l'URI</button>
+                </form>
+            </div>
+            <div class="field-row">
+                <form method="post">
+                    <button name="oauth-disable" class="target-button">Désactiver OAuth2</button>
+                </form>
+            </div>
+            } else {
+            <form method="post" class="field-row">
+                <button name="oauth-enable" class="target-button">Activer OAuth2</button>
+            </form>
+            }
+        </fieldset>
+    </div>
+</div>
+})

@@ -1,0 +1,22 @@
+@use crate::ructe_types::Flashes;
+
+@(flashes: Flashes)
+
+@for (text, is_error) in flashes {
+<div class="window" style="max-width: 600px; margin-bottom: 2em;">
+    <div class="title-bar">
+        <div class="title-bar-text">@if *is_error { Erreur } else { Information }</div>
+        <div class="title-bar-controls">
+            <button aria-label="Close" onclick="this.parentElement.parentElement.parentElement.remove()"></button>
+        </div>
+    </div>
+    <div class="window-body">
+        @if *is_error {
+        <img src="/static/error.png" alt="Error icon">
+        } else {
+        <img src="/static/info.png" alt="Info icon">
+        }
+        <p>@text</p>
+    </div>
+</div>
+}

@@ -1,0 +1,117 @@
+* {
+    margin: 0;
+}
+
+html, body {
+    height: 100%;
+}
+
+body {
+    display: flex;
+    flex-direction: row;
+
+    background: #ece9d8;
+}
+
+body > aside {
+    position: fixed;
+
+    margin: 8px;
+    width: calc(20vw - 16px);
+    height: calc(100% - 16px);
+}
+
+body > main {
+    margin: 2em;
+    margin-left: 20vw;
+    width: 80%;
+    height: calc(100% - 4em);
+}
+
+.target-button:target {
+    background: chartreuse;
+}
+
+.table-container {
+    border: 1px solid black;
+}
+
+table {
+    border-collapse: collapse;
+    background: white;
+    font-family: "Pixelated MS Sans Serif", Arial;
+    font-size: 11px;
+}
+
+thead {
+    height: 19px;
+    background: #ebeadb;
+}
+
+thead > tr {
+    border-bottom: 1px solid #cbc7b8;
+}
+
+th {
+    font-weight: normal;
+    background: url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAATCAYAAABRC2cZAAAABmJLR0QA/wD/AP+gvaeTAAAACXBIWXMAAAsTAAALEwEAmpwYAAAAB3RJTUUH5AwSCjAYv1yqUgAAAB1pVFh0Q29tbWVudAAAAAAAQ3JlYXRlZCB3aXRoIEdJTVBkLmUHAAAAHklEQVQI12N4/er2fyYGBgYGahLfv3xiYPry5SsDAHtECY4FstK+AAAAAElFTkSuQmCC');
+}
+
+th > span:first-child:not(.handle) {
+    padding: 0 9px;
+}
+
+th > .handle {
+    border-left: 1px solid #c7c5b2;
+    border-right: 1px solid #ffffff;
+    cursor: col-resize;
+    height: 13px;
+    float: right;
+    margin-left: -1px;
+    margin-right: -1px;
+}
+
+tbody > tr {
+    height: 14px;
+}
+
+td {
+    padding: 0 7px;
+}
+
+th, td {
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+table td:last-child {
+    width: 100%;
+}
+
+tbody > tr.selected, .table-hover-selected > tbody > tr:hover {
+    position: relative;
+    background: #316ac5;
+    color: white;
+}
+
+tbody > tr.selected::after, .table-hover-selected > tbody > tr:hover::after {
+  content: "";
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+
+  position: absolute;
+  box-sizing: border-box;
+  border: 1px dotted #ce953a;
+  pointer-events: none;
+}
+
+.a-reset {
+    color: inherit;
+    text-decoration: inherit;
+}
+
+input[type=text], input[type=email], input[type=url], input[type=password], textarea {
+    border: 1px solid black;
+}

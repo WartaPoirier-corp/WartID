@@ -1,5 +1,8 @@
 /target
-Cargo.lock
 
-/.idea
+*.env
+.idea
 *.iml
+
+postgres/
+postgres_data/

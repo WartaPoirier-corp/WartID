@@ -1,0 +1,45 @@
+@use crate::templates::base_raw;
+
+@()
+
+@:base_raw("Portail", {
+<link rel="stylesheet" href="/static/login.css">
+}, {
+<section id="login">
+    <div>
+        <img src="static/winxp.png"/>
+        <h4>Pour commencer, connectez vous</h4>
+    </div>
+    <div id="login-box-list">
+        <form class="login-box active" method="post">
+            <div>
+                <img class="login-box-pp"/>
+                <div class="login-controls">
+                    <input type="text" name="username" placeholder="John Doe"/>
+                    <div class="login-box-password-bar">
+                        <input type="password" name="password" autocomplete="off" placeholder="hunter2"/>
+                        <button type="submit" aria-label="Se connecter"></button>
+                    </div>
+                </div>
+            </div>
+        </form>
+        <template id="login-box">
+            <form class="login-box" method="post">
+                <div>
+                    <img class="login-box-pp"/>
+                    <div class="login-controls">
+                        <h2 class="login-box-name"></h2>
+                        <label style=display>Entrez votre mot de passe</label>
+                        <div class="login-box-password-bar">
+                            <input type="hidden" name="username"/>
+                            <input type="password" name="password" autocomplete="off" placeholder="hunter2"/>
+                            <button type="submit" aria-label="Se connecter"></button>
+                        </div>
+                    </div>
+                </div>
+            </form>
+        </template>
+    </div>
+</section>
+<script src="/static/login.js"></script>
+})

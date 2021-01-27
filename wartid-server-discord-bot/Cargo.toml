@@ -1,0 +1,21 @@
+[package]
+name = "wartid-server-discord-bot"
+version = "0.1.0"
+description = "I hate tokio, I spent 2h trying to include the Discord bot in the web server binary but Tokio kept panicking..."
+authors = ["Edgar Onghena <dev@edgar.bzh>"]
+edition = "2018"
+
+[dependencies]
+async-fs = "1.5"
+async-trait = "0.1"
+chrono = { version = "0.4", features = ["serde"] }
+dotenv = "0.15"
+jsonwebtoken = "7.2"
+rand = "0.7"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+serenity = "0.9"
+tokio = { version = "0.2", features = ["macros"] }
+
+[build-dependencies]
+ructe = "0.13"
