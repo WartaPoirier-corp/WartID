@@ -21,7 +21,7 @@
             version = "0.1.0";
             src = ./.;
             workspace_member = "wartid-server-discord-bot";
-            cargoSha256 = "sha256-XRVUSfd6ls6ha34wH8DyXzGNtSnLo/Ie7H03JOrY1sA=";
+            cargoSha256 = "sha256-Noh/A8+MduFWKr84U+LiSLfu6wYlK2M9u6un0gAJIxU=";
             buildInputs = with pkgs; [ postgresql ];
             meta = with pkgs.lib; {
               description = "Discord bot WartID authentication";
@@ -37,7 +37,7 @@
             version = "0.1.0";
             src = ./.;
             workspace_member = "wartid-server";
-            cargoSha256 = "sha256-Z8XNTp0A8PF4/s6dJdY6HdDjpwhQETPf86fwQBSO0/w=";
+            cargoSha256 = "sha256-8iLG2YBGP9suCDP4PC2i3S6pKsYorIBUs5w1JSpdWHY=";
             cargoBuildFlags = [ "--features" "discord_bot" ];
             buildInputs = with pkgs; [ postgresql ];
             postInstall = ''
