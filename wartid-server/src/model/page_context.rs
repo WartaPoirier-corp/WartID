@@ -1,10 +1,6 @@
 use std::borrow::Cow;
 
-use uuid::Uuid;
-
 use super::*;
-
-pub enum FlashMessage {}
 
 pub struct PageContext {
     pub users: Vec<(UserId, String)>,
