@@ -11,10 +11,12 @@ discord_bot = ["ctrlc"]
 [dependencies]
 base64 = "0.13"
 bcrypt = "0.9"
+build-info = "0.0"
 chrono = { version = "0.4", features = ["serde"] }
 ctrlc = { version = "3.1", optional = true }
 diesel = { version = "1.4", features = ["chrono", "postgres", "uuidv07"] }
 dotenv = "0.15"
+git-version = "0.3"
 jsonwebtoken = "7.2"
 lazy_static = "1.4"
 log = "0.4"
@@ -28,4 +30,5 @@ time = "0.1"
 uuid = { version = "0.8", features = ["serde"] }
 
 [build-dependencies]
+build-info-build = "0.0"
 ructe = "0.13"

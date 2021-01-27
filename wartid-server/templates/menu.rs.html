@@ -27,6 +27,12 @@
     </li>
 </ul>
 
+<p style="padding-top: 0.5em; opacity: 0.6; font-size: 0.8em;">
+    @(crate::BUILD_INFO)
+    <br>
+    git revision: @(crate::BUILD_INFO_GIT)
+</p>
+
 <form action="/logout" method="post" style="margin-top: 1em;">
     <button>Déconnexion</button>
 </form>
