@@ -75,7 +75,6 @@ pub struct AuthorizeQuery<'a> {
     redirect_uri: String,
     scope: Option<OAuth2Scopes>,
     response_type: AuthorizeResponseType,
-    response_mode: &'a RawStr,
     state: Option<String>,
     nonce: Option<&'a RawStr>,
 }
