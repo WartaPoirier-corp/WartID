@@ -1,4 +1,5 @@
 @use crate::model::PageContext;
+@use crate::BUILD_INFO_GIT;
 
 @(ctx: &PageContext)
 
@@ -29,7 +30,7 @@
 
 <p style="padding-top: 0.5em; opacity: 0.6; font-size: 0.8em;">
     @(crate::BUILD_INFO)
-    @if let Some(rev) = crate::BUILD_INFO_GIT {
+    @if let Some(rev) = BUILD_INFO_GIT {
         <br>
         git revision: @rev
     }
