@@ -39,7 +39,7 @@ mod schema;
 mod utils;
 
 const BUILD_INFO: &str = build_info::format!("{} v{} built with {} at {}", $.crate_info.name, $.crate_info.version, $.compiler, $.timestamp);
-const BUILD_INFO_GIT: &str = git_version::git_version!();
+const BUILD_INFO_GIT: Option<&'static str> = std::option_env!("GIT_REV");
 
 /// Ructe's parser is really bad and won't let us use "complex" types (that is, types with `<>`,
 /// `::`, `[]`, etc. in their syntax), so I'm type-def-ing aliases here.
