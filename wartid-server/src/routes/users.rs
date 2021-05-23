@@ -1,5 +1,6 @@
-use rocket::http::RawStr;
+use rocket::http::{ContentType, RawStr};
 use rocket::request::{FormItems, FormParseError, FromForm, FromParam};
+use rocket::response::Content;
 use uuid::Error;
 
 use super::prelude::*;
@@ -55,6 +56,18 @@ pub fn view(
         &user,
         session.user.id == user_id
     ))));
+}
+
+#[get("/<user_id>/avatar", rank = 10)]
+pub fn avatar(
+    session: &LoginSession,
+    db: DbConn,
+    user_id: UuidParamWithAt,
+) -> WartIDResult<Content<Vec<u8>>> {
+    Ok(Content(
+        ContentType::PNG,
+        Vec::from(&include_bytes!("../../static/avatar.png")[..]),
+    ))
 }
 
 #[derive(Debug)]

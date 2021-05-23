@@ -361,6 +361,7 @@ fn main() {
                 routes::oauth2::token,
                 routes::oauth2::userinfo,
                 routes::users::view,
+                routes::users::avatar,
                 routes::users::view_me,
                 routes::users::view_update,
                 login,
