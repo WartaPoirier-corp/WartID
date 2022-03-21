@@ -45,10 +45,15 @@ jobs:
           DATABASE_URL: postgres://wartid:wartid@localhost/wartid
       - name: Build --all-features
         working-directory: ./wartid-server/
-        run: cargo build --all-features --verbose
+        run: cargo build --release --all-features --verbose
+      - name: Upload a Build Artifact
+        uses: actions/upload-artifact@v3.0.0
+        with:
+          name: wartid-server
+          path: ./wartid-server/target/release/*
       - name: Build --no-default-features
         working-directory: ./wartid-server/
-        run: cargo build --no-default-features --verbose
+        run: cargo build --release --no-default-features --verbose
       - name: Run tests
         working-directory: ./wartid-server/
         run: cargo test --verbose
