@@ -50,7 +50,7 @@ jobs:
         uses: actions/upload-artifact@v3.0.0
         with:
           name: wartid-server
-          path: wartid-server/target/release/wartid-server
+          path: ./wartid-server/target/release/*
       - name: Build --no-default-features
         working-directory: ./wartid-server/
         run: cargo build --release --no-default-features --verbose
