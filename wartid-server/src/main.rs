@@ -37,7 +37,7 @@ mod utils;
 embed_migrations!();
 
 const BUILD_INFO: &str = build_info::format!("{} v{} built with {} at {}", $.crate_info.name, $.crate_info.version, $.compiler, $.timestamp);
-const BUILD_INFO_GIT: &str = git_version::git_version!();
+const BUILD_INFO_GIT: Option<&'static str> = std::option_env!("GIT_REV");
 
 const SESSION_COOKIE_EXPIRATION: time::Duration = time::Duration::days(14);
 
