@@ -12,6 +12,7 @@ env:
 jobs:
   build-server:
     runs-on: ubuntu-latest
+    container: edgarogh/rust-diesel:1.59-1.4.1
 
     services:
       postgres:
@@ -32,12 +33,7 @@ jobs:
       - name: Test DB, install uuid-ossp, and interrupt action if it doesn't work
         run: psql postgres://wartid:wartid@localhost/wartid --command='create extension "uuid-ossp";'
       - uses: actions/checkout@v2
-      - uses: actions-rs/toolchain@v1
-        with:
-          toolchain: nightly-2021-01-15
       - uses: Swatinem/rust-cache@v1
-      - name: Install diesel
-        run: cargo install diesel_cli --no-default-features --features postgres
       - name: Apply migrations
         working-directory: ./wartid-server/
         run: diesel migration run
@@ -45,10 +41,28 @@ jobs:
           DATABASE_URL: postgres://wartid:wartid@localhost/wartid
       - name: Build --all-features
         working-directory: ./wartid-server/
-        run: cargo build --all-features --verbose
+        run: cargo build --release --all-features --verbose
       - name: Build --no-default-features
         working-directory: ./wartid-server/
-        run: cargo build --no-default-features --verbose
+        run: cargo build --release --no-default-features --verbose
       - name: Run tests
         working-directory: ./wartid-server/
         run: cargo test --verbose
+      - uses: actions/upload-artifact@v3
+        with:
+          name: wartid-server
+          path: ./target/release/wartid-server
+
+  build-server-discord-bot:
+    runs-on: ubuntu-latest
+    container: edgarogh/rust-diesel:1.59-1.4.1
+    steps:
+      - uses: actions/checkout@v2
+      - uses: Swatinem/rust-cache@v1
+      - name: Build
+        working-directory: ./wartid-server-discord-bot/
+        run: cargo build --release --verbose
+      - uses: actions/upload-artifact@v3
+        with:
+          name: wartid-server-discord-bot
+          path: ./target/release/wartid-server-discord-bot
