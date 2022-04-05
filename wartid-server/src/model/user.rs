@@ -1,16 +1,16 @@
-use diesel::{ExpressionMethods, QueryDsl, RunQueryDsl};
-use uuid::Uuid;
+use diesel::{ExpressionMethods, OptionalExtension, QueryDsl, RunQueryDsl};
 
 #[cfg(feature = "discord_bot")]
 pub use discord_login::{destroy as discord_login_destroy, init as discord_login_init};
 
+use crate::id::Id;
 use crate::schema::users;
 
 use super::*;
 
-crate::def_id!(pub struct UserId);
+pub type UserId = Id<User>;
 
-#[derive(Debug, Queryable)]
+#[derive(Clone, Debug, Queryable)]
 pub struct User {
     pub id: UserId,
     pub username: String,
@@ -95,7 +95,8 @@ impl User {
         match users
             .filter(username.eq(l_username))
             .first::<User>(db)
-            .extract_not_found()
+            .optional()
+            .map_err(Into::into)
         {
             Ok(Some(user)) => {
                 if let Some(db_password) = &user.password {
@@ -187,7 +188,7 @@ mod discord_login {
     use jsonwebtoken::{DecodingKey, TokenData, Validation};
 
     lazy_static::lazy_static! {
-        static ref KEY: DecodingKey<'static> = {
+        static ref KEY: DecodingKey = {
             use rand::Rng;
 
             let gen: &'static _ = Box::<[u8; 32]>::leak(Box::new(rand::rngs::OsRng.gen()));
@@ -199,7 +200,7 @@ mod discord_login {
     }
 
     pub fn init() {
-        &*KEY;
+        let _ = &*KEY;
     }
 
     pub fn destroy() {
@@ -219,15 +220,14 @@ mod discord_login {
     }
 
     pub fn verify_jwt(token: &str) -> Result<(u64, String), String> {
-        jsonwebtoken::decode(
-            token,
-            &*KEY,
-            &Validation {
-                validate_exp: true,
-                ..Default::default()
-            },
-        )
-        .map_err(|err| err.to_string())
-        .map(|data: TokenData<Claims>| (data.claims.sub, data.claims.name))
+        let validation = &{
+            let mut v = Validation::default();
+            v.validate_exp = true;
+            v
+        };
+
+        jsonwebtoken::decode(token, &*KEY, validation)
+            .map_err(|err| err.to_string())
+            .map(|data: TokenData<Claims>| (data.claims.sub, data.claims.name))
     }
 }

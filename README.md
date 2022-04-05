@@ -25,7 +25,8 @@ DISCORD_TOKEN=...
 DISCORD_ALLOWED_GUILDS=012345678901234567
 
 # Server
-DATABASE_URL=postgres://username:password@localhost/wartid
+#DATABASE_URL=postgres://username:password@localhost/wartid
+# This is currently set in Rocket.toml
 ```
 
 Both of the binaries can (and will) load `.env` files in their CWD.

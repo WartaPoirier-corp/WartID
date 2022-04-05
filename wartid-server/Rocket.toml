@@ -1,0 +1,3 @@
+[debug]
+limits.forms = 10000000
+databases.wartid.url = "postgres://wartid:dev@localhost/wartid_dev"

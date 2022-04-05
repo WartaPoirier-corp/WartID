@@ -1,25 +1,21 @@
-#![feature(
-    associated_type_defaults,
-    proc_macro_hygiene,
-    decl_macro,
-    str_split_once
-)]
-
 #[macro_use]
 extern crate diesel;
 #[macro_use]
-extern crate rocket;
+extern crate diesel_migrations;
 #[macro_use]
-extern crate rocket_contrib;
+extern crate rocket;
 
 use std::borrow::Cow;
 use std::path::{Path, PathBuf};
 
-use rocket::config::{ConfigBuilder, Environment};
-use rocket::http::{Cookie, Cookies, RawStr, Status};
-use rocket::request::{Form, FromForm, FromRequest, Outcome};
-use rocket::response::status::{NotFound, Unauthorized};
-use rocket::response::{NamedFile, Redirect, Responder};
+use rocket::fairing::AdHoc;
+use rocket::form::Form;
+use rocket::fs::NamedFile;
+use rocket::http::{Cookie, CookieJar, Status};
+use rocket::outcome::{try_outcome, IntoOutcome};
+use rocket::request::{FromRequest, Outcome};
+use rocket::response::status::NotFound;
+use rocket::response::Redirect;
 use rocket::Request;
 use uuid::Uuid;
 
@@ -38,8 +34,19 @@ mod routes;
 mod schema;
 mod utils;
 
+embed_migrations!();
+
 const BUILD_INFO: &str = build_info::format!("{} v{} built with {} at {}", $.crate_info.name, $.crate_info.version, $.compiler, $.timestamp);
 const BUILD_INFO_GIT: &str = git_version::git_version!();
+
+const SESSION_COOKIE_EXPIRATION: time::Duration = time::Duration::days(14);
+
+#[macro_export]
+macro_rules! db_await {
+    ($($call_path:ident)::* ($db:ident, $($arg:expr),*$(,)?)) => {
+        $db.run(move |$db| $($call_path)::*($db, $($arg),*)).await
+    };
+}
 
 /// Ructe's parser is really bad and won't let us use "complex" types (that is, types with `<>`,
 /// `::`, `[]`, etc. in their syntax), so I'm type-def-ing aliases here.
@@ -51,16 +58,16 @@ lazy_static::lazy_static! {
     pub static ref CONFIG: Config = Config::load();
 }
 
-impl<'r> rocket::response::Responder<'r> for WartIDError {
-    fn respond_to(self, request: &Request) -> rocket::response::Result<'r> {
+impl<'r> rocket::response::Responder<'r, 'static> for WartIDError {
+    fn respond_to(self, request: &Request) -> rocket::response::Result<'static> {
         format!("{:#?}", self).respond_to(request)
     }
 }
 
 pub type DbConnection<'a> = &'a diesel::PgConnection;
 
-#[database("wartid")]
-pub struct DbConn(diesel::PgConnection);
+#[rocket_sync_db_pools::database("wartid")]
+pub struct DbConn(rocket_sync_db_pools::diesel::PgConnection);
 
 pub struct LoginSession {
     user: model::User,
@@ -74,14 +81,15 @@ pub enum LoginSessionError {
     DatabaseError,
 }
 
-impl<'a, 'r> FromRequest<'a, 'r> for &'a LoginSession {
+#[rocket::async_trait]
+impl<'r> FromRequest<'r> for &'r LoginSession {
     type Error = LoginSessionError;
 
-    fn from_request(request: &'a Request) -> Outcome<Self, Self::Error> {
-        let mut cookies: Cookies = request.guard().unwrap();
+    async fn from_request(request: &'r Request<'_>) -> Outcome<Self, Self::Error> {
+        let cookies: &CookieJar = request.guard().await.unwrap();
 
         request
-            .local_cache(|| {
+            .local_cache_async(async {
                 // TODO const cookie name
                 let login_session = match cookies.get("login_session") {
                     None => {
@@ -101,69 +109,79 @@ impl<'a, 'r> FromRequest<'a, 'r> for &'a LoginSession {
                     }
                 };
 
-                let db: DbConn = request.guard().map_failure(|_| {
+                let db: DbConn = try_outcome!(request.guard().await.map_failure(|_| {
                     (
                         Status::InternalServerError,
                         LoginSessionError::DatabaseError,
                     )
-                })?;
+                }));
 
-                // TODO following 2 assignments are dirty af
-                let session = model::Session::find_by_id(&db, login_session)
-                    .map_err(|_| Err((Status::Forbidden, LoginSessionError::InvalidSession)))?
-                    .ok_or(Err((Status::Forbidden, LoginSessionError::InvalidSession)))?;
+                // TODO dirty af
+                let session = {
+                    let opt_session =
+                        try_outcome!(db_await!(model::Session::find_by_id(db, login_session))
+                            .map_err(|_| LoginSessionError::InvalidSession)
+                            .into_outcome(Status::Forbidden));
 
-                let user = model::User::find_by_id(&db, session)
-                    .map_err(|_| {
-                        (
-                            Status::InternalServerError,
-                            LoginSessionError::DatabaseError,
-                        )
-                    })
-                    .map_err(|_| {
-                        Err((
-                            // A session token should always correspond to a user
-                            Status::InternalServerError,
-                            LoginSessionError::DatabaseError,
-                        ))
-                    })?
-                    .ok_or(Err((
+                    match opt_session {
+                        Some(session) => session,
+                        None => {
+                            return Err(LoginSessionError::InvalidSession)
+                                .into_outcome(Status::BadRequest);
+                        }
+                    }
+                };
+
+                let user = {
+                    let opt_user = try_outcome!(db_await!(model::User::find_by_id(db, session))
+                        .map_err(|_| LoginSessionError::DatabaseError) // Request failure
+                        .into_outcome(Status::InternalServerError));
+
+                    try_outcome!(opt_user
                         // A session token should always correspond to a user
-                        Status::InternalServerError,
-                        LoginSessionError::DatabaseError,
-                    )))?;
+                        .ok_or(LoginSessionError::DatabaseError)
+                        .into_outcome(Status::InternalServerError))
+                };
 
                 Outcome::Success(LoginSession { user })
             })
+            .await
             .as_ref()
             .map_failure(Clone::clone)
             .map_forward(|()| ())
     }
 }
 
-impl<'a, 'r> FromRequest<'a, 'r> for model::PageContext {
+#[rocket::async_trait]
+impl<'r> FromRequest<'r> for model::PageContext {
     type Error = WartIDError;
 
-    fn from_request(request: &'a Request) -> Outcome<Self, Self::Error> {
-        let session: &LoginSession = request
+    async fn from_request(request: &'r Request<'_>) -> Outcome<Self, Self::Error> {
+        let session: &LoginSession = try_outcome!(request
             .guard()
-            .map_failure(|(s, e)| (s, WartIDError::InvalidCredentials(format!("{:?}", e))))?;
+            .await
+            .map_failure(|(s, e)| (s, WartIDError::InvalidCredentials(format!("{:?}", e)))));
 
-        let db: DbConn = request
+        let db: DbConn = try_outcome!(request
             .guard()
-            .map_failure(|(s, ())| (s, WartIDError::DatabaseConnection))?;
+            .await
+            .map_failure(|(s, ())| (s, WartIDError::DatabaseConnection)));
 
-        let ctx =
-            Self::new(&db, session.user.id).map_err(|e| Err((Status::InternalServerError, e)))?;
+        let user_id = session.user.id;
+        let ctx = try_outcome!(
+            db_await!(Self::new(db, user_id)).into_outcome(Status::InternalServerError)
+        );
 
         Outcome::Success(ctx)
     }
 }
 
 #[get("/static/<file..>")]
-fn static_file(file: PathBuf) -> Result<NamedFile, NotFound<String>> {
+async fn static_file(file: PathBuf) -> Result<NamedFile, NotFound<String>> {
     let path = Path::new("static/").join(file);
-    NamedFile::open(&path).map_err(|e| NotFound(e.to_string()))
+    NamedFile::open(&path)
+        .await
+        .map_err(|e| NotFound(e.to_string()))
 }
 
 #[get("/")]
@@ -180,11 +198,10 @@ fn home(ctx: model::PageContext) -> WartIDResult<Ructe> {
     Ok(render!(panel::home(&ctx)))
 }
 
-#[allow(unused_variables)]
 #[get("/login?<redirect_to>")]
 pub fn login(
     session: Option<&LoginSession>,
-    redirect_to: Option<&RawStr>, // Not used but required for rocket to be happy
+    #[allow(unused_variables)] redirect_to: Option<&str>, // Not used but required for rocket to be happy
 ) -> Result<Ructe, Redirect> {
     if session.is_some() {
         return Err(Redirect::to("/@me"));
@@ -193,75 +210,53 @@ pub fn login(
     Ok(render!(login::login()))
 }
 
-pub struct DoLoginResponse {
-    pub user: crate::model::User,
-    pub redirect_to: Option<String>,
-}
-
-impl<'r> Responder<'r> for DoLoginResponse {
-    fn respond_to(self, request: &Request<'_>) -> rocket::response::Result<'r> {
-        let db: DbConn = match request.guard() {
-            Outcome::Success(x) => x,
-            Outcome::Forward(_) => unimplemented!(),
-            Outcome::Failure(_) => return WartIDError::DatabaseConnection.respond_to(request),
-        };
-
-        let mut cookies: Cookies = request.guard().expect("cannot get cookies");
-
-        let session_id = match model::Session::insert(&db, model::NewSession::new(self.user.id)) {
-            Ok(x) => x,
-            Err(err) => return err.respond_to(request),
-        };
-
-        cookies.add(
-            Cookie::build("login_session", session_id.to_string())
-                .max_age(time::Duration::days(14))
-                .finish(),
-        );
-
-        Redirect::to(
-            self.redirect_to
-                .unwrap_or_else(|| String::from("/@me"))
-                .as_str()
-                .to_string(),
-        )
-        .respond_to(request)
-    }
-}
-
 #[cfg(feature = "discord_bot")]
 #[get("/login-with-discord?<token>")]
-pub fn login_with_discord(
+pub async fn login_with_discord(
     db: DbConn,
-    token: &RawStr,
-) -> Result<DoLoginResponse, Result<Unauthorized<Cow<'static, str>>, WartIDError>> {
-    let user = match model::User::attempt_login(&db, "", token.as_str()) {
+    cookies: &CookieJar<'_>,
+    token: String,
+) -> Result<Redirect, Result<(Status, Cow<'static, str>), WartIDError>> {
+    let user = match db_await!(model::User::attempt_login(db, "", &token)) {
         Ok(Some(user)) => user,
         // 😓
         Ok(None) => {
-            return Err(Ok(Unauthorized(Some(Cow::Borrowed(
-                "Impossible de créer un compte utilisateur.",
-            )))));
+            return Err(Ok((
+                Status::Unauthorized,
+                Cow::Borrowed("Impossible de créer un compte utilisateur."),
+            )));
         }
         Err(WartIDError::InvalidCredentials(msg)) => {
-            return Err(Ok(Unauthorized(Some(Cow::Owned(format!(
-                "Jeton invalide, a-t-il expiré ? Message d'erreur: {}",
-                msg
-            ))))));
+            return Err(Ok((
+                Status::Unauthorized,
+                Cow::Owned(format!(
+                    "Jeton invalide, a-t-il expiré ? Message d'erreur: {}",
+                    msg
+                )),
+            )));
         }
         Err(other) => return Err(Err(other)),
     };
 
-    Ok(DoLoginResponse {
-        user,
-        redirect_to: None,
-    })
+    let user_id = user.id;
+    let session_id = match db_await!(model::Session::insert(db, model::NewSession::new(user_id))) {
+        Ok(x) => x,
+        Err(err) => return Err(Err(err)),
+    };
+
+    cookies.add(
+        Cookie::build("login_session", session_id.to_string())
+            .max_age(SESSION_COOKIE_EXPIRATION)
+            .finish(),
+    );
+
+    Ok(Redirect::to("/@me"))
 }
 
 #[derive(FromForm)]
-struct LoginCredentials<'a> {
-    username: &'a RawStr,
-    password: &'a RawStr,
+struct LoginCredentials {
+    username: String,
+    password: String,
 }
 
 /// ### Main login route
@@ -273,20 +268,25 @@ struct LoginCredentials<'a> {
 /// These cases are mutually exclusive. Errors may be reported if conflicting query parameters are
 /// received.
 #[post("/login?<redirect_to>", data = "<form>")]
-fn login_post(
+async fn login_post(
     db: DbConn,
-    mut cookies: Cookies,
+    cookies: &CookieJar<'_>,
     form: Form<LoginCredentials>,
     redirect_to: Option<String>, // TODO Refactor these 2 lines to a tagged union ?
 ) -> Result<Redirect, WartIDError> {
-    let res = model::User::attempt_login(&db, form.username.as_str(), form.password.as_str())?;
+    let res = db_await!(model::User::attempt_login(
+        db,
+        &form.username,
+        &form.password
+    ))?;
 
     let user = match res {
         Some(users_) => users_,
         None => return Err(WartIDError::Todo),
     };
 
-    let session_id = model::Session::insert(&db, model::NewSession::new(user.id))?;
+    let user_id = user.id;
+    let session_id = db_await!(model::Session::insert(db, model::NewSession::new(user_id)))?;
 
     cookies.add(
         Cookie::build("login_session", session_id.to_string())
@@ -304,14 +304,15 @@ fn login_post(
 
 // TODO CSRF
 #[post("/logout")]
-fn logout(mut cookies: Cookies) -> Redirect {
+fn logout(cookies: &CookieJar) -> Redirect {
     cookies.remove(Cookie::named("login_session"));
     // TODO faire aussi sauter la session dans la BDD
 
     Redirect::to("/login")
 }
 
-fn main() {
+#[rocket::launch]
+async fn launch() -> _ {
     let _ = dotenv::dotenv();
 
     #[cfg(feature = "discord_bot")]
@@ -320,32 +321,7 @@ fn main() {
         model::discord_login_init();
     }
 
-    let config = {
-        use std::collections::BTreeMap;
-
-        /// Builds a single-element BTreeMap
-        #[inline]
-        fn b_tree_map<T>(k: &'static str, v: T) -> BTreeMap<&'static str, T> {
-            let mut x = BTreeMap::new();
-            x.insert(k, v);
-            x
-        }
-
-        let config = ConfigBuilder::new(Environment::active().unwrap()).extra(
-            "databases",
-            b_tree_map(
-                "wartid",
-                b_tree_map(
-                    "url",
-                    std::env::var("DATABASE_URL").expect("no DATABASE_URL set"),
-                ),
-            ),
-        );
-
-        config.unwrap()
-    };
-
-    rocket::custom(config)
+    rocket::build()
         .attach(DbConn::fairing())
         .mount(
             "/",
@@ -375,7 +351,17 @@ fn main() {
             let routes = routes![];
             routes
         })
-        .launch();
+        .attach(AdHoc::on_liftoff("migration runner", |rocket| {
+            Box::pin(async move {
+                let conn = DbConn::get_one(rocket)
+                    .await
+                    .expect("no database available for running migrations");
+
+                conn.run(|c| embedded_migrations::run_with_output(c, &mut std::io::stdout()))
+                    .await
+                    .unwrap();
+            })
+        }))
 }
 
 include!(concat!(env!("OUT_DIR"), "/templates.rs"));

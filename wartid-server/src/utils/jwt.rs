@@ -45,7 +45,7 @@ pub struct JWT<ClaimsIn, ClaimsOut> {
     duration: Duration,
 
     key_enc: EncodingKey,
-    key_dec: DecodingKey<'static>,
+    key_dec: DecodingKey,
 
     _phantom: PhantomData<(ClaimsIn, ClaimsOut)>,
 }
@@ -62,7 +62,7 @@ impl<'de, ClaimsIn: Serialize + 'static, ClaimsOut: DeserializeOwned + 'static>
             issuer,
             duration,
             key_enc: EncodingKey::from_secret(&gen[..]),
-            key_dec: DecodingKey::from_secret(&gen[..]).into_static(),
+            key_dec: DecodingKey::from_secret(&gen[..]),
             _phantom: PhantomData,
         }
     }
@@ -84,15 +84,13 @@ impl<'de, ClaimsIn: Serialize + 'static, ClaimsOut: DeserializeOwned + 'static>
     }
 
     pub fn decode(&self, token: &str) -> Result<ClaimsOut, JWTValidationError> {
-        let data = jsonwebtoken::decode(
-            token,
-            &self.key_dec,
-            &Validation {
-                validate_exp: false,
-                ..Validation::default()
-            },
-        )
-        .map_err(|e| {
+        let validation = &{
+            let mut v = Validation::default();
+            v.validate_exp = false;
+            v
+        };
+
+        let data = jsonwebtoken::decode(token, &self.key_dec, validation).map_err(|e| {
             println!("{:?}", e);
             JWTValidationError::InvalidSignature
         })?;

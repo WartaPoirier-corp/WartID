@@ -3,11 +3,12 @@ use diesel::{
     BoolExpressionMethods, Connection, ExpressionMethods, QueryDsl, Queryable, RunQueryDsl,
 };
 
+use crate::id::Id;
 use crate::schema::{user_apps, user_apps_managers};
 
 use super::*;
 
-crate::def_id!(pub struct UserAppId);
+pub type UserAppId = Id<UserApp>;
 
 type OAuthSecret = String;
 

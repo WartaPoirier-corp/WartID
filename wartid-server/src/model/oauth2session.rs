@@ -1,6 +1,5 @@
 use chrono::{Duration, NaiveDateTime, Utc};
-use diesel::{BoolExpressionMethods, ExpressionMethods, QueryDsl, RunQueryDsl};
-use uuid::Uuid;
+use diesel::{BoolExpressionMethods, ExpressionMethods, OptionalExtension, QueryDsl, RunQueryDsl};
 
 use crate::model::OAuth2Scopes;
 use crate::schema::sessions_oauth2;
@@ -63,6 +62,7 @@ impl OAuth2Session {
         sessions_oauth2
             .filter(token.eq(l_token).and(expiration.ge(Utc::now().naive_utc())))
             .first::<Self>(db)
-            .extract_not_found()
+            .optional()
+            .map_err(Into::into)
     }
 }

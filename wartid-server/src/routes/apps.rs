@@ -1,11 +1,12 @@
-use rocket::http::RawStr;
-use rocket::request::{FormItems, FormParseError, FromForm};
+use rocket::form::error::ErrorKind;
+use rocket::form::{DataField, FromForm, Options, ValueField};
 
 use super::prelude::*;
 
 #[get("/apps")]
-pub fn list(ctx: PageContext, session: &LoginSession, db: DbConn) -> WartIDResult<Ructe> {
-    let apps = UserApp::find_all(&db, session.user.id)?;
+pub async fn list(ctx: PageContext, session: &LoginSession, db: DbConn) -> WartIDResult<Ructe> {
+    let user_id = session.user.id;
+    let apps = db_await!(UserApp::find_all(db, user_id))?;
 
     Ok(render!(panel::apps_list(&ctx, &apps[..])))
 }
@@ -17,10 +18,15 @@ pub struct FormNewApp {
 }
 
 #[post("/apps/new", data = "<data>")]
-pub fn new(session: &LoginSession, db: DbConn, data: Form<FormNewApp>) -> WartIDResult<Redirect> {
+pub async fn new(
+    session: &LoginSession,
+    db: DbConn,
+    data: Form<FormNewApp>,
+) -> WartIDResult<Redirect> {
     let data = data.into_inner();
 
-    let id = UserApp::insert(&db, data.name, data.hidden, session.user.id)?;
+    let user_id = session.user.id;
+    let id = db_await!(UserApp::insert(db, data.name, data.hidden, user_id))?;
 
     Ok(Redirect::to(format!("/apps/{}", id)))
 }
@@ -30,8 +36,8 @@ fn view_render(ctx: PageContext, app: UserApp) -> WartIDResult<Option<Ructe>> {
 }
 
 #[get("/apps/<app_id>")]
-pub fn view(ctx: PageContext, db: DbConn, app_id: UserAppId) -> WartIDResult<Option<Ructe>> {
-    let app = match UserApp::find_by_id(&db, app_id)? {
+pub async fn view(ctx: PageContext, db: DbConn, app_id: UserAppId) -> WartIDResult<Option<Ructe>> {
+    let app = match db_await!(UserApp::find_by_id(db, app_id))? {
         Some(app) => app,
         None => return Ok(None),
     };
@@ -47,72 +53,89 @@ pub enum FormUpdateIntent {
     OAuthDisable,
 }
 
-impl<'a> FromForm<'a> for FormUpdateIntent {
-    type Error = FormParseError<'a>;
+#[derive(Debug, FromForm)]
+pub struct FormUpdateIntentRaw {
+    name: Option<String>,
+    description: Option<String>,
+    #[field(name = "oauth-redirect")]
+    oauth_redirect_uri: Option<String>,
 
-    fn from_form(it: &mut FormItems<'a>, strict: bool) -> Result<Self, Self::Error> {
-        #[derive(Debug, FromForm)]
-        struct FormUpdateIntentRaw<'a> {
-            name: Option<String>,
-            description: Option<String>,
-            #[form(field = "oauth-redirect")]
-            oauth_redirect_uri: Option<String>,
+    // Buttons (mutually exclusive)
+    #[field(name = "update-general", default = false)]
+    update_general: bool,
+    #[field(name = "oauth-enable", default = false)]
+    oauth_enable: bool,
+    #[field(name = "oauth-disable", default = false)]
+    oauth_disable: bool,
+    #[field(name = "oauth-update-redirect", default = false)]
+    oauth_update_redirect: bool,
+}
 
-            // Buttons (mutually exclusive)
-            #[form(field = "update-general")]
-            update_general: Option<&'a RawStr>,
-            #[form(field = "oauth-enable")]
-            oauth_enable: Option<&'a RawStr>,
-            #[form(field = "oauth-disable")]
-            oauth_disable: Option<&'a RawStr>,
-            #[form(field = "oauth-update-redirect")]
-            oauth_update_redirect: Option<&'a RawStr>,
-        }
+#[rocket::async_trait]
+impl<'r> FromForm<'r> for FormUpdateIntent {
+    type Context = <FormUpdateIntentRaw as FromForm<'r>>::Context;
 
-        Ok(match FormUpdateIntentRaw::from_form(it, strict)? {
+    fn init(opts: Options) -> Self::Context {
+        FormUpdateIntentRaw::init(opts)
+    }
+
+    fn push_value(ctxt: &mut Self::Context, field: ValueField<'r>) {
+        FormUpdateIntentRaw::push_value(ctxt, field)
+    }
+
+    async fn push_data(ctxt: &mut Self::Context, field: DataField<'r, '_>) {
+        FormUpdateIntentRaw::push_data(ctxt, field).await;
+    }
+
+    fn finalize(ctxt: Self::Context) -> rocket::form::Result<'r, Self> {
+        Ok(match FormUpdateIntentRaw::finalize(ctxt)? {
             FormUpdateIntentRaw {
                 name: Some(name),
                 description: Some(description),
                 oauth_redirect_uri: None,
-                update_general: Some(_),
-                oauth_enable: None,
-                oauth_disable: None,
-                oauth_update_redirect: None,
+                update_general: true,
+                oauth_enable: false,
+                oauth_disable: false,
+                oauth_update_redirect: false,
             } => FormUpdateIntent::UpdateGeneral { name, description },
             FormUpdateIntentRaw {
                 name: None,
                 description: None,
                 oauth_redirect_uri: None,
-                update_general: None,
-                oauth_enable: Some(_),
-                oauth_disable: None,
-                oauth_update_redirect: None,
+                update_general: false,
+                oauth_enable: true,
+                oauth_disable: false,
+                oauth_update_redirect: false,
             } => FormUpdateIntent::OAuthEnable,
             FormUpdateIntentRaw {
                 name: None,
                 description: None,
                 oauth_redirect_uri: None,
-                update_general: None,
-                oauth_enable: None,
-                oauth_disable: Some(_),
-                oauth_update_redirect: None,
+                update_general: false,
+                oauth_enable: false,
+                oauth_disable: true,
+                oauth_update_redirect: false,
             } => FormUpdateIntent::OAuthDisable,
             FormUpdateIntentRaw {
                 name: None,
                 description: None,
                 oauth_redirect_uri: Some(uri),
-                update_general: None,
-                oauth_enable: None,
-                oauth_disable: None,
-                oauth_update_redirect: Some(_),
+                update_general: false,
+                oauth_enable: false,
+                oauth_disable: false,
+                oauth_update_redirect: true,
             } => FormUpdateIntent::OAuthSetRedirectUri(uri),
-            _ => Err(FormParseError::Unknown("?".into(), "?".into()))?,
+            _ => Err(ErrorKind::Duplicate)?,
         })
+    }
+
+    fn push_error(ctxt: &mut Self::Context, error: rocket::form::Error<'r>) {
+        FormUpdateIntentRaw::push_error(ctxt, error)
     }
 }
 
 #[post("/apps/<app_id>", data = "<data>")]
-pub fn view_update(
+pub async fn view_update(
     mut ctx: PageContext,
     db: DbConn,
     app_id: UserAppId,
@@ -127,7 +150,7 @@ pub fn view_update(
                 );
                 return view_render(
                     ctx,
-                    match UserApp::find_by_id(&db, app_id) {
+                    match db_await!(UserApp::find_by_id(db, app_id)) {
                         Ok(Some(app)) => app,
                         Ok(None) => return Ok(None),
                         Err(err) => return Err(err),
@@ -136,19 +159,25 @@ pub fn view_update(
             }
 
             (
-                UserApp::set_name_description(&db, app_id, &name, &description)?,
+                db_await!(UserApp::set_name_description(
+                    db,
+                    app_id,
+                    &name,
+                    &description
+                ))?,
                 "Nom et/ou description de l'app mis·es à jour avec succès.",
             )
         }
         FormUpdateIntent::OAuthEnable => (
-            UserApp::set_oauth(&db, app_id, true)?,
+            db_await!(UserApp::set_oauth(db, app_id, true))?,
             "Secret OAuth2 généré.",
         ),
-        FormUpdateIntent::OAuthDisable => {
-            (UserApp::set_oauth(&db, app_id, false)?, "OAuth2 désactivé.")
-        }
+        FormUpdateIntent::OAuthDisable => (
+            db_await!(UserApp::set_oauth(db, app_id, false))?,
+            "OAuth2 désactivé.",
+        ),
         FormUpdateIntent::OAuthSetRedirectUri(uri) => (
-            UserApp::set_oauth_redirect_uri(&db, app_id, uri)?,
+            db_await!(UserApp::set_oauth_redirect_uri(db, app_id, uri))?,
             "URI de redirection OAuth2 autorisé mis à jour.",
         ),
     };

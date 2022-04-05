@@ -8,8 +8,8 @@ pub struct Ructe {
     pub bad_request: bool,
 }
 
-impl<'r> Responder<'r> for Ructe {
-    fn respond_to(self, req: &Request) -> rocket::response::Result<'r> {
+impl<'r> Responder<'r, 'static> for Ructe {
+    fn respond_to(self, req: &Request) -> rocket::response::Result<'static> {
         let mut response = &mut Response::build_from(HtmlContent(self.content).respond_to(req)?);
 
         if self.bad_request {
