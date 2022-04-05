@@ -30,6 +30,8 @@ jobs:
           - 5432:5432
 
     steps:
+      - name: Install psql
+        run: apt install postgresql-client-12
       - name: Test DB, install uuid-ossp, and interrupt action if it doesn't work
         run: psql postgres://wartid:wartid@localhost/wartid --command='create extension "uuid-ossp";'
       - uses: actions/checkout@v2
