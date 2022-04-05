@@ -88,12 +88,12 @@ impl EventHandler for Handler {
 
         if !found_in_guild {
             eprintln!("Foreign user attempted to get a token");
-            received_message.reply(&ctx, "Je te connais pas.").await;
+            let _ = received_message.reply(&ctx, "Je te connais pas.").await;
             return;
         }
 
         if !received_message.is_private() {
-            received_message.reply(
+            let _ = received_message.reply(
                 &ctx,
                 random_of(&[
                     "Vas donc voir tes DM (c'est un URL de connection privé, je ne vais pas te l'envoyer ici)",
@@ -129,7 +129,7 @@ impl EventHandler for Handler {
                         var
                     };
 
-                    private.send_message(&ctx, |m| m.content(
+                    let _ = private.send_message(&ctx, |m| m.content(
                         format!(
                             "{}\n{}",
                             random_of(&[
@@ -146,7 +146,7 @@ impl EventHandler for Handler {
                     )).await;
                 }
                 Err(err) => {
-                    private
+                    let _ = private
                         .send_message(&ctx, |m| {
                             m.content(format!(
                                 "{}\n```\n{:?}\n```",
@@ -162,7 +162,7 @@ impl EventHandler for Handler {
                 }
             };
 
-            typing.map(Typing::stop);
+            let _ = typing.map(Typing::stop);
         }
     }
 }
