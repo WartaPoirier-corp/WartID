@@ -8,7 +8,7 @@ use super::WartIDResult;
 use super::*;
 
 #[derive(Debug, Queryable, Insertable, AsChangeset)]
-#[table_name = "sessions_oauth2"]
+#[diesel(table_name = sessions_oauth2)]
 pub struct OAuth2Session {
     pub token: String,
     pub users_id: UserId,
@@ -18,7 +18,7 @@ pub struct OAuth2Session {
 }
 
 #[derive(Insertable)]
-#[table_name = "sessions_oauth2"]
+#[diesel(table_name = sessions_oauth2)]
 pub struct NewOAuth2Session<'a> {
     pub token: &'a str,
     pub users_id: UserId,
@@ -42,7 +42,7 @@ impl OAuth2Session {
             token: l_token,
             users_id: user,
             user_apps_id: app,
-            initial_scopes: format!("{}", scopes),
+            initial_scopes: format!("{scopes}"),
             expiration: Utc::now().naive_utc() + Duration::days(6 * 30),
         };
 

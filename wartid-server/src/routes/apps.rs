@@ -8,7 +8,7 @@ pub async fn list(ctx: PageContext, session: &LoginSession, db: DbConn) -> WartI
     let user_id = session.user.id;
     let apps = db_await!(UserApp::find_all(db, user_id))?;
 
-    Ok(render!(panel::apps_list(&ctx, &apps[..])))
+    Ok(render!(panel::apps_list_html(&ctx, &apps[..])))
 }
 
 #[derive(FromForm)]
@@ -28,18 +28,17 @@ pub async fn new(
     let user_id = session.user.id;
     let id = db_await!(UserApp::insert(db, data.name, data.hidden, user_id))?;
 
-    Ok(Redirect::to(format!("/apps/{}", id)))
+    Ok(Redirect::to(format!("/apps/{id}")))
 }
 
 fn view_render(ctx: PageContext, app: UserApp) -> WartIDResult<Option<Ructe>> {
-    Ok(Some(render!(panel::app_view(&ctx, &app))))
+    Ok(Some(render!(panel::app_view_html(&ctx, &app))))
 }
 
 #[get("/apps/<app_id>")]
 pub async fn view(ctx: PageContext, db: DbConn, app_id: UserAppId) -> WartIDResult<Option<Ructe>> {
-    let app = match db_await!(UserApp::find_by_id(db, app_id))? {
-        Some(app) => app,
-        None => return Ok(None),
+    let Some(app) = db_await!(UserApp::find_by_id(db, app_id))? else {
+        return Ok(None);
     };
 
     view_render(ctx, app)
@@ -80,11 +79,15 @@ impl<'r> FromForm<'r> for FormUpdateIntent {
     }
 
     fn push_value(ctxt: &mut Self::Context, field: ValueField<'r>) {
-        FormUpdateIntentRaw::push_value(ctxt, field)
+        FormUpdateIntentRaw::push_value(ctxt, field);
     }
 
     async fn push_data(ctxt: &mut Self::Context, field: DataField<'r, '_>) {
         FormUpdateIntentRaw::push_data(ctxt, field).await;
+    }
+
+    fn push_error(ctxt: &mut Self::Context, error: rocket::form::Error<'r>) {
+        FormUpdateIntentRaw::push_error(ctxt, error);
     }
 
     fn finalize(ctxt: Self::Context) -> rocket::form::Result<'r, Self> {
@@ -127,10 +130,6 @@ impl<'r> FromForm<'r> for FormUpdateIntent {
             } => FormUpdateIntent::OAuthSetRedirectUri(uri),
             _ => Err(ErrorKind::Duplicate)?,
         })
-    }
-
-    fn push_error(ctxt: &mut Self::Context, error: rocket::form::Error<'r>) {
-        FormUpdateIntentRaw::push_error(ctxt, error)
     }
 }
 

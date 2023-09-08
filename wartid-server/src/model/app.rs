@@ -1,4 +1,4 @@
-use diesel::expression::exists::exists;
+use diesel::dsl::exists;
 use diesel::{
     BoolExpressionMethods, Connection, ExpressionMethods, QueryDsl, Queryable, RunQueryDsl,
 };
@@ -47,7 +47,7 @@ impl UserApp {
 
         // Insertions are done in a transaction so if the second one fails, the first one should in
         // theory be rolled back. Else, we would end up with an orphan app.
-        db.transaction::<UserAppId, WartIDError, _>(|| {
+        db.transaction::<UserAppId, WartIDError, _>(|db| {
             let app_id = diesel::insert_into(user_apps)
                 .values(NewUserApp {
                     name: l_name,
@@ -136,14 +136,14 @@ impl UserApp {
 }
 
 #[derive(Insertable)]
-#[table_name = "user_apps"]
+#[diesel(table_name = user_apps)]
 struct NewUserApp {
     name: String,
     hidden: bool,
 }
 
 #[derive(Insertable)]
-#[table_name = "user_apps_managers"]
+#[diesel(table_name = user_apps_managers)]
 struct NewUserAppManager {
     user_apps_id: UserAppId,
     users_id: UserId,

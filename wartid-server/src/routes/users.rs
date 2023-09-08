@@ -1,22 +1,19 @@
 use rocket::form::error::ErrorKind;
 use rocket::form::{DataField, FromForm, Options, ValueField};
 use rocket::request::FromParam;
-use uuid::Error;
+use uuid::Error as UuidError;
 
 use super::prelude::*;
 
 pub struct UuidParamWithAt(UserId);
 
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 pub enum UuidParamWithAtError {
+    #[error("missing '@' prefix")]
     NoAtSymbol,
-    Uuid(uuid::Error),
-}
 
-impl From<uuid::Error> for UuidParamWithAtError {
-    fn from(e: Error) -> Self {
-        Self::Uuid(e)
-    }
+    #[error(transparent)]
+    Uuid(#[from] UuidError),
 }
 
 impl<'a> FromParam<'a> for UuidParamWithAt {
@@ -24,7 +21,7 @@ impl<'a> FromParam<'a> for UuidParamWithAt {
 
     fn from_param(param: &'a str) -> Result<Self, Self::Error> {
         if let Some(param) = param.strip_prefix('@') {
-            Ok(UuidParamWithAt(UserId::from_param(param.into())?))
+            Ok(UuidParamWithAt(UserId::from_param(param)?))
         } else {
             Err(UuidParamWithAtError::NoAtSymbol)
         }
@@ -51,11 +48,11 @@ pub async fn view(
         Err(err) => return Err(err),
     };
 
-    return Ok(Some(render!(panel::user_view(
+    Ok(Some(render!(panel::user_view_html(
         &ctx;
         &user,
         session.user.id == user_id
-    ))));
+    ))))
 }
 
 #[derive(Debug)]
@@ -97,6 +94,10 @@ impl<'r> FromForm<'r> for FormUpdateIntent {
         FormUpdateIntentRaw::push_data(ctxt, field).await;
     }
 
+    fn push_error(ctxt: &mut Self::Context, error: rocket::form::Error<'r>) {
+        FormUpdateIntentRaw::push_error(ctxt, error);
+    }
+
     fn finalize(ctxt: Self::Context) -> rocket::form::Result<'r, Self> {
         Ok(match FormUpdateIntentRaw::finalize(ctxt)? {
             FormUpdateIntentRaw {
@@ -126,10 +127,6 @@ impl<'r> FromForm<'r> for FormUpdateIntent {
             _ => Err(ErrorKind::Duplicate)?,
         })
     }
-
-    fn push_error(ctxt: &mut Self::Context, error: rocket::form::Error<'r>) {
-        FormUpdateIntentRaw::push_error(ctxt, error)
-    }
 }
 
 #[post("/<user_id>", data = "<data>")]
@@ -155,7 +152,7 @@ pub async fn view_update(
                     Cow::Borrowed("Le nom doit faire minimum 3 caractères."),
                     true,
                 );
-                return Ok(render!(panel::user_view(&ctx; &session.user, true)));
+                return Ok(render!(panel::user_view_html(&ctx; &session.user, true)));
             };
 
             (
@@ -170,7 +167,7 @@ pub async fn view_update(
                     Cow::Borrowed("Merci de rentrer une adresse e-mail valide."),
                     true,
                 );
-                return Ok(render!(panel::user_view(&ctx; &session.user, true)));
+                return Ok(render!(panel::user_view_html(&ctx; &session.user, true)));
             };
 
             (
@@ -184,7 +181,7 @@ pub async fn view_update(
                     Cow::Borrowed("Le mot de passe doit faire minimum 8 caractères."),
                     true,
                 );
-                return Ok(render!(panel::user_view(&ctx; &session.user, true)));
+                return Ok(render!(panel::user_view_html(&ctx; &session.user, true)));
             };
 
             (
@@ -196,5 +193,5 @@ pub async fn view_update(
 
     ctx.add_flash_message(Cow::Borrowed(success_message), false);
 
-    return Ok(render!(panel::user_view(&ctx; &user, true)));
+    Ok(render!(panel::user_view_html(&ctx; &user, true)))
 }

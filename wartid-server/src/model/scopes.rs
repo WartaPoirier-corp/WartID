@@ -93,7 +93,7 @@ impl serde::Serialize for OAuth2Scopes {
     where
         S: serde::Serializer,
     {
-        serializer.serialize_str(&format!("{}", self))
+        serializer.serialize_str(&format!("{self}"))
     }
 }
 

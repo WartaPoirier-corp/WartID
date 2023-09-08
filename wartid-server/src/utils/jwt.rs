@@ -15,10 +15,15 @@ fn now() -> DateTime<Utc> {
     return unsafe { TEST_NOW };
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, thiserror::Error)]
 pub enum JWTValidationError {
+    #[error("invalid jwt signature")]
     InvalidSignature,
+
+    #[error("invalid jwt 'aud'")]
     InvalidAudience,
+
+    #[error("expired jwt")]
     Expired,
 }
 
@@ -91,7 +96,7 @@ impl<'de, ClaimsIn: Serialize + 'static, ClaimsOut: DeserializeOwned + 'static>
         };
 
         let data = jsonwebtoken::decode(token, &self.key_dec, validation).map_err(|e| {
-            println!("{:?}", e);
+            log::error!("jwt decode error: {e}");
             JWTValidationError::InvalidSignature
         })?;
 

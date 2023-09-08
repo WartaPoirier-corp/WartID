@@ -1,10 +1,10 @@
 @use crate::model::PageContext;
 @use crate::model::User;
-@use crate::templates::base;
+@use crate::templates::base_html;
 
 @(menu_context: &PageContext, user: &User, is_me: bool)
 
-@:base(&user.username, menu_context, {
+@:base_html(&user.username, menu_context, {
 <div class="window" style="max-width: 500px;">
     <div class="title-bar">
         <div class="title-bar-text">@@@user.username</div>

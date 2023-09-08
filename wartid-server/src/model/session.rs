@@ -39,7 +39,7 @@ impl Session {
 }
 
 #[derive(Insertable)]
-#[table_name = "sessions"]
+#[diesel(table_name = sessions)]
 pub struct NewSession {
     pub users_id: UserId,
     pub expiration: NaiveDateTime,

@@ -1,9 +1,9 @@
 @use crate::model::PageContext;
-@use crate::templates::base;
+@use crate::templates::base_html;
 
 @(ctx: &PageContext)
 
-@:base("Accueil", ctx, {
+@:base_html("Accueil", ctx, {
 <p>
     Bienvenue sur WartID, le portail de connection de la WPcorp. Il n'y a pas grand chose à faire ici si ce n'est créer,
     configurer et administrer vos WartApps existantes.

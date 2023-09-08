@@ -1,12 +1,12 @@
 @use crate::model::User;
 @use crate::model::UserApp;
 @use crate::model::{OAuth2Scopes, OAuth2Scope};
-@use crate::templates::base_raw;
+@use crate::templates::base_raw_html;
 
 @use OAuth2Scopes as OAS /* Ructe doesn't like digits */;
 @(user: &User, app: &UserApp, redirect_short: &str, redirect_uri: &str, redirect_code: Option<&str>, state: Option<&str>, scopes: &OAS)
 
-@:base_raw("Autorisation", {
+@:base_raw_html("Autorisation", {
 <link rel="stylesheet" href="/static/authorize.css"/>
 }, {
 <main class="window">

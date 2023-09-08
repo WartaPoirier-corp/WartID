@@ -1,5 +1,6 @@
 use std::borrow::Cow;
 
+use crate::config::Config;
 use rocket::form::error::ErrorKind;
 use rocket::form::{FromFormField, ValueField};
 use rocket::http::uri::Origin;
@@ -8,7 +9,7 @@ use rocket::outcome::{try_outcome, IntoOutcome};
 use rocket::request::FromRequest;
 use rocket::request::Outcome;
 use rocket::serde::json::Json;
-use rocket::Request;
+use rocket::{Request, State};
 
 use crate::utils::jwt::JWT;
 
@@ -76,17 +77,9 @@ macro_rules! implies {
     };
 }
 
-#[cfg(test)]
-#[test]
-fn implies_test() {
-    assert!(implies!(true => true));
-    assert!(!implies!(true => false));
-    assert!(implies!(false => true));
-    assert!(implies!(false => false));
-}
-
 #[get("/oauth2/authorize?<authorize..>")]
 pub async fn authorize(
+    config: &State<Config>,
     current_uri: &Origin<'_>,
     session: Option<&LoginSession>,
     db: DbConn,
@@ -117,8 +110,7 @@ pub async fn authorize(
                 let redirect_uri_short = redirect_uri
                     .split_once("//")
                     .and_then(|(_, right)| right.split_once('/'))
-                    .map(|(left, _)| left)
-                    .unwrap_or(redirect_uri.as_str());
+                    .map_or(redirect_uri.as_str(), |(left, _)| left);
 
                 let scopes = authorize.scope.unwrap_or_default();
 
@@ -137,7 +129,7 @@ pub async fn authorize(
 
                 // TODO X-Frame-Options: Deny
 
-                Ok(render!(oauth2::authorize(
+                Ok(render!(oauth2::authorize_html(
                     &session.user,
                     &app,
                     redirect_uri_short,
@@ -147,11 +139,11 @@ pub async fn authorize(
                     &scopes
                 )))
             } else {
-                let uri = format!("{}{}", crate::CONFIG.http_base_url, current_uri.to_string());
+                let uri = format!("{}{}", config.base_url, current_uri);
                 Err(Redirect::to(uri!(crate::login(Some(uri)))))
             }
         }),
-        Err(err) => Err(WartIDError::InvalidForm(format!("{:?}", err))),
+        Err(err) => Err(WartIDError::InvalidForm(format!("{err:?}"))),
     }
 }
 
@@ -188,14 +180,8 @@ impl<'r> FromRequest<'r> for BasicAuthorization {
     type Error = String;
 
     async fn from_request(request: &'r Request<'_>) -> Outcome<Self, Self::Error> {
-        let auth = match request.headers().get("Authorization").next() {
-            Some(auth) => auth,
-            None => {
-                return Outcome::Failure((
-                    Status::Forbidden,
-                    String::from("No Authorization header"),
-                ));
-            }
+        let Some(auth) = request.headers().get("Authorization").next() else {
+            return Outcome::Failure((Status::Forbidden, String::from("No Authorization header")));
         };
 
         let auth = try_outcome!(auth
@@ -305,7 +291,7 @@ pub async fn token(
     let app = match db_await!(UserApp::find_by_id(db, client_id)) {
         Ok(Some(app)) => app,
         Ok(None) => return Err(String::from("unknown client id")),
-        Err(e) => return Err(format!("{:?}", e)),
+        Err(e) => return Err(format!("{e}")),
     };
 
     if Some(client_password.as_ref()) != app.oauth2().map(|(secret, _)| secret) {
@@ -319,7 +305,7 @@ pub async fn token(
         (GrantType::AuthorizationCode, Some(code), None) => {
             let authorize = JWT_AUTHORIZE
                 .decode(code)
-                .map_err(|e| format!("invalid code, might have expired: {:?}", e))?; // TODO
+                .map_err(|e| format!("invalid code, might have expired: {e}"))?; // TODO
 
             if authorize.client != app.id {
                 return Err(String::from("invalid client"));
@@ -330,7 +316,7 @@ pub async fn token(
             (authorize.user, authorize.initial_scopes)
         }
         (GrantType::RefreshToken, None, Some(refresh_token)) => {
-            let session = db_await!(OAuth2Session::find_by_token(db, &refresh_token)).map_err(|e| format!("{:?}", e))?;
+            let session = db_await!(OAuth2Session::find_by_token(db, &refresh_token)).map_err(|e| format!("{e}"))?;
 
             match session {
                 Some(session) => {
@@ -383,7 +369,7 @@ pub struct UserInfo {
 pub fn userinfo(session: BearerSession) -> Json<UserInfo> {
     let BearerSession { user, scopes } = session;
 
-    println!("scopes: {:?}", scopes);
+    log::info!("scopes: {scopes:?}");
 
     Json(UserInfo {
         sub: user.id,

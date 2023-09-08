@@ -1,13 +1,11 @@
 use std::fmt::Formatter;
-use std::io::Write;
 use std::marker::PhantomData;
 use std::str::FromStr;
 
 use diesel::backend::Backend;
-use diesel::expression::bound::Bound;
 use diesel::expression::AsExpression;
+use diesel::internal::derives::as_expression::Bound;
 use diesel::pg::Pg;
-use diesel::types::{FromSql, ToSql};
 use diesel::{sql_types, Expression};
 use rocket::form::error::ErrorKind;
 use rocket::form::{FromFormField, ValueField};
@@ -29,7 +27,7 @@ impl<T> Id<T> {
 
 impl<T> Clone for Id<T> {
     fn clone(&self) -> Self {
-        Self(self.0, self.1)
+        *self
     }
 }
 
@@ -48,11 +46,10 @@ impl<T> std::fmt::Debug for Id<T> {
         let type_name = std::any::type_name::<T>();
         let type_name_short = type_name
             .rsplit_once("::")
-            .map(|(_, n)| n)
-            .unwrap_or(&type_name)
+            .map_or(type_name, |(_, n)| n)
             .trim();
 
-        f.debug_tuple(&format!("Id<{}>", type_name_short))
+        f.debug_tuple(&format!("Id<{type_name_short}>"))
             .field(&self.0)
             .finish()
     }
@@ -108,16 +105,16 @@ impl<'r, T> FromFormField<'r> for Id<T> {
     }
 }
 
-impl<T> ToSql<sql_types::Uuid, Pg> for Id<T> {
-    fn to_sql<W: Write>(
-        &self,
-        out: &mut diesel::serialize::Output<W, Pg>,
+impl<T> diesel::serialize::ToSql<sql_types::Uuid, Pg> for Id<T> {
+    fn to_sql<'b>(
+        &'b self,
+        out: &mut diesel::serialize::Output<'b, '_, Pg>,
     ) -> diesel::serialize::Result {
         <Uuid as diesel::serialize::ToSql<sql_types::Uuid, Pg>>::to_sql(&self.0, out)
     }
 }
 
-impl<T, ST> AsExpression<ST> for Id<T>
+impl<T, ST: sql_types::SingleValue> AsExpression<ST> for Id<T>
 where
     Bound<ST, Uuid>: Expression<SqlType = ST>,
 {
@@ -128,7 +125,7 @@ where
     }
 }
 
-impl<T, ST> AsExpression<ST> for &Id<T>
+impl<T, ST: sql_types::SingleValue> AsExpression<ST> for &Id<T>
 where
     Bound<ST, Uuid>: Expression<SqlType = ST>,
 {
@@ -139,21 +136,20 @@ where
     }
 }
 
-impl<T> FromSql<sql_types::Uuid, Pg> for Id<T> {
-    fn from_sql(bytes: Option<&<Pg as Backend>::RawValue>) -> diesel::deserialize::Result<Self> {
+impl<T> diesel::deserialize::FromSql<sql_types::Uuid, Pg> for Id<T> {
+    fn from_sql(bytes: <Pg as Backend>::RawValue<'_>) -> diesel::deserialize::Result<Self> {
         Uuid::from_sql(bytes).map(Self::from_uuid)
     }
 }
 
-impl<T, ST, DB> diesel::query_source::Queryable<ST, DB> for Id<T>
+impl<T, DB> diesel::Queryable<sql_types::Uuid, DB> for Id<T>
 where
-    Uuid: diesel::types::FromSqlRow<ST, DB>,
-    DB: diesel::backend::Backend,
-    DB: diesel::types::HasSqlType<ST>,
+    DB: Backend,
+    Uuid: diesel::deserialize::FromSql<sql_types::Uuid, DB>,
 {
     type Row = Uuid;
 
-    fn build(row: Self::Row) -> Self {
-        Self::from_uuid(row)
+    fn build(uuid: Self::Row) -> diesel::deserialize::Result<Self> {
+        Ok(Self::from_uuid(uuid))
     }
 }

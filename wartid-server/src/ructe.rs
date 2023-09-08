@@ -1,5 +1,5 @@
 use rocket::http::Status;
-use rocket::response::content::Html as HtmlContent;
+use rocket::response::content::RawHtml as HtmlContent;
 use rocket::response::Responder;
 use rocket::{Request, Response};
 
@@ -24,7 +24,7 @@ impl<'r> Responder<'r, 'static> for Ructe {
 macro_rules! render {
     ($group:tt::$page:tt($($param:expr),*)) => {
         {
-            use crate::templates;
+            use $crate::templates;
 
             let mut res = Vec::new();
             templates::$group::$page(
@@ -42,7 +42,7 @@ macro_rules! render {
     };
     ($group:tt::$page:tt($page_context:expr; $($param:expr),*)) => {
         {
-            use crate::templates;
+            use $crate::templates;
 
             let page_context = $page_context;
             let bad_request = page_context.flash_bad_request;

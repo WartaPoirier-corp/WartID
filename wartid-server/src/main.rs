@@ -5,8 +5,10 @@ extern crate diesel_migrations;
 #[macro_use]
 extern crate rocket;
 
+use diesel_migrations::{EmbeddedMigrations, MigrationHarness};
 use std::borrow::Cow;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use rocket::fairing::AdHoc;
 use rocket::form::Form;
@@ -16,10 +18,11 @@ use rocket::outcome::{try_outcome, IntoOutcome};
 use rocket::request::{FromRequest, Outcome};
 use rocket::response::status::NotFound;
 use rocket::response::Redirect;
-use rocket::Request;
+use rocket::{Request, State};
 use uuid::Uuid;
 
 use crate::config::Config;
+use crate::discord::DiscordAgent;
 use crate::model::{WartIDError, WartIDResult};
 use crate::ructe::Ructe;
 
@@ -29,12 +32,13 @@ mod id;
 #[macro_use]
 mod ructe;
 mod config;
+mod discord;
 mod model;
 mod routes;
 mod schema;
 mod utils;
 
-embed_migrations!();
+pub const MIGRATIONS: EmbeddedMigrations = embed_migrations!();
 
 const BUILD_INFO: &str = build_info::format!("{} v{} built with {} at {}", $.crate_info.name, $.crate_info.version, $.compiler, $.timestamp);
 const BUILD_INFO_GIT: Option<&'static str> = std::option_env!("GIT_REV");
@@ -54,30 +58,33 @@ pub mod ructe_types {
     pub type Flashes<'a> = &'a [(std::borrow::Cow<'static, str>, bool)];
 }
 
-lazy_static::lazy_static! {
-    pub static ref CONFIG: Config = Config::load();
-}
-
 impl<'r> rocket::response::Responder<'r, 'static> for WartIDError {
     fn respond_to(self, request: &Request) -> rocket::response::Result<'static> {
-        format!("{:#?}", self).respond_to(request)
+        format!("{self}").respond_to(request)
     }
 }
 
-pub type DbConnection<'a> = &'a diesel::PgConnection;
+pub type DbConnection<'a> = &'a mut diesel::PgConnection;
 
 #[rocket_sync_db_pools::database("wartid")]
-pub struct DbConn(rocket_sync_db_pools::diesel::PgConnection);
+pub struct DbConn(diesel::PgConnection);
 
 pub struct LoginSession {
     user: model::User,
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, thiserror::Error)]
 pub enum LoginSessionError {
+    #[error("no session cookie")]
     NoCookie,
+
+    #[error("invalid session cookie value")]
     InvalidCookie,
+
+    #[error("invalid session")]
     InvalidSession,
+
+    #[error("database error while loading session")]
     DatabaseError,
 }
 
@@ -96,15 +103,14 @@ impl<'r> FromRequest<'r> for &'r LoginSession {
                         return Outcome::Failure((Status::Forbidden, LoginSessionError::NoCookie));
                     }
                     Some(cookie) => {
-                        match cookie.value().parse::<Uuid>() {
-                            Ok(session_uuid) => session_uuid,
-                            Err(_) => {
-                                cookies.remove(Cookie::named("login_session")); // TODO check if works
-                                return Outcome::Failure((
-                                    Status::Forbidden,
-                                    LoginSessionError::InvalidCookie,
-                                ));
-                            }
+                        if let Ok(session_uuid) = cookie.value().parse::<Uuid>() {
+                            session_uuid
+                        } else {
+                            cookies.remove(Cookie::named("login_session")); // TODO check if works
+                            return Outcome::Failure((
+                                Status::Forbidden,
+                                LoginSessionError::InvalidCookie,
+                            ));
                         }
                     }
                 };
@@ -160,7 +166,7 @@ impl<'r> FromRequest<'r> for model::PageContext {
         let session: &LoginSession = try_outcome!(request
             .guard()
             .await
-            .map_failure(|(s, e)| (s, WartIDError::InvalidCredentials(format!("{:?}", e)))));
+            .map_failure(|(s, e)| (s, WartIDError::InvalidCredentials(format!("{e}")))));
 
         let db: DbConn = try_outcome!(request
             .guard()
@@ -195,7 +201,7 @@ fn root(session: Option<&LoginSession>) -> Redirect {
 
 #[get("/home")]
 fn home(ctx: model::PageContext) -> WartIDResult<Ructe> {
-    Ok(render!(panel::home(&ctx)))
+    Ok(render!(panel::home_html(&ctx)))
 }
 
 #[get("/login?<redirect_to>")]
@@ -207,17 +213,18 @@ pub fn login(
         return Err(Redirect::to("/@me"));
     }
 
-    Ok(render!(login::login()))
+    Ok(render!(login::login_html()))
 }
 
-#[cfg(feature = "discord_bot")]
 #[get("/login-with-discord?<token>")]
 pub async fn login_with_discord(
     db: DbConn,
+    discord_agent: &State<Arc<DiscordAgent>>,
     cookies: &CookieJar<'_>,
     token: String,
 ) -> Result<Redirect, Result<(Status, Cow<'static, str>), WartIDError>> {
-    let user = match db_await!(model::User::attempt_login(db, "", &token)) {
+    let discord_agent = Some(Arc::clone(&discord_agent));
+    let user = match db_await!(model::User::attempt_login(db, discord_agent, "", &token)) {
         Ok(Some(user)) => user,
         // 😓
         Ok(None) => {
@@ -230,8 +237,7 @@ pub async fn login_with_discord(
             return Err(Ok((
                 Status::Unauthorized,
                 Cow::Owned(format!(
-                    "Jeton invalide, a-t-il expiré ? Message d'erreur: {}",
-                    msg
+                    "Jeton invalide, a-t-il expiré ? Message d'erreur: {msg}"
                 )),
             )));
         }
@@ -270,19 +276,21 @@ struct LoginCredentials {
 #[post("/login?<redirect_to>", data = "<form>")]
 async fn login_post(
     db: DbConn,
+    discord_agent: &State<Arc<DiscordAgent>>,
     cookies: &CookieJar<'_>,
     form: Form<LoginCredentials>,
     redirect_to: Option<String>, // TODO Refactor these 2 lines to a tagged union ?
 ) -> Result<Redirect, WartIDError> {
+    let discord_agent = Some(Arc::clone(discord_agent));
     let res = db_await!(model::User::attempt_login(
         db,
+        discord_agent,
         &form.username,
         &form.password
     ))?;
 
-    let user = match res {
-        Some(users_) => users_,
-        None => return Err(WartIDError::Todo),
+    let Some(user) = res else {
+        return Err(WartIDError::Todo);
     };
 
     let user_id = user.id;
@@ -315,13 +323,12 @@ fn logout(cookies: &CookieJar) -> Redirect {
 async fn launch() -> _ {
     let _ = dotenv::dotenv();
 
-    #[cfg(feature = "discord_bot")]
-    {
-        ctrlc::set_handler(model::discord_login_destroy).expect("cannot set ctrl+c handler");
-        model::discord_login_init();
-    }
+    // Serenity is a bit talkative, and I don't care that much about tracing
+    let _ = tracing::subscriber::set_global_default(tracing::subscriber::NoSubscriber::new());
 
     rocket::build()
+        .attach(AdHoc::config::<Config>())
+        .attach(DiscordAgent::fairing())
         .attach(DbConn::fairing())
         .mount(
             "/",
@@ -341,25 +348,24 @@ async fn launch() -> _ {
                 routes::users::view_update,
                 login,
                 login_post,
+                login_with_discord,
                 logout,
             ],
         )
-        .mount("/", {
-            #[cfg(feature = "discord_bot")]
-            let routes = routes![login_with_discord];
-            #[cfg(not(feature = "discord_bot"))]
-            let routes = routes![];
-            routes
-        })
         .attach(AdHoc::on_liftoff("migration runner", |rocket| {
             Box::pin(async move {
                 let conn = DbConn::get_one(rocket)
                     .await
                     .expect("no database available for running migrations");
 
-                conn.run(|c| embedded_migrations::run_with_output(c, &mut std::io::stdout()))
+                let ran_count = conn
+                    .run(|c| c.run_pending_migrations(MIGRATIONS).map(|mv| mv.len()))
                     .await
                     .unwrap();
+
+                if ran_count > 0 {
+                    log::info!("ran {ran_count} migrations before startup");
+                }
             })
         }))
 }
