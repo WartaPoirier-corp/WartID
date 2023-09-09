@@ -1,16 +1,14 @@
-use diesel::{ExpressionMethods, QueryDsl, RunQueryDsl};
-use uuid::Uuid;
+use diesel::{ExpressionMethods, OptionalExtension, QueryDsl, RunQueryDsl};
+use std::sync::Arc;
 
-#[cfg(feature = "discord_bot")]
-pub use discord_login::{destroy as discord_login_destroy, init as discord_login_init};
-
+use crate::id::Id;
 use crate::schema::users;
 
 use super::*;
 
-crate::def_id!(pub struct UserId);
+pub type UserId = Id<User>;
 
-#[derive(Debug, Queryable)]
+#[derive(Clone, Debug, Queryable)]
 pub struct User {
     pub id: UserId,
     pub username: String,
@@ -50,7 +48,6 @@ impl User {
             .next())
     }
 
-    #[cfg(feature = "discord_bot")]
     fn find_or_create_by_discord_id(
         db: crate::DbConnection,
         l_discord_id: u64,
@@ -58,11 +55,11 @@ impl User {
     ) -> WartIDResult<User> {
         use crate::schema::users::dsl::*;
 
+        // PostgreSQL doesn't have a u64 type, so we bit-cast into i64
+        let l_discord_id = i64::from_le_bytes(l_discord_id.to_le_bytes());
+
         // TODO handle not found
-        if let Ok(user) = users
-            .filter(discord_id.eq(unsafe { std::mem::transmute::<u64, i64>(l_discord_id) }))
-            .first::<User>(db)
-        {
+        if let Ok(user) = users.filter(discord_id.eq(l_discord_id)).first::<User>(db) {
             return Ok(user);
         }
 
@@ -70,7 +67,7 @@ impl User {
             username: l_discord_name,
             password: None,
             email: None,
-            discord_id: Some(unsafe { std::mem::transmute(l_discord_id) }),
+            discord_id: Some(l_discord_id),
         };
 
         User::insert(db, new_user)
@@ -78,28 +75,30 @@ impl User {
 
     pub fn attempt_login(
         db: crate::DbConnection,
+        discord_agent: Option<Arc<crate::discord::DiscordAgent>>,
         l_username: &str,
         l_password: &str,
     ) -> WartIDResult<Option<User>> {
         use crate::schema::users::dsl::*;
 
         // Attempt JWT / discord login
-        #[cfg(feature = "discord_bot")]
-        if l_username.is_empty() {
-            let (l_discord_id, l_discord_name) = discord_login::verify_jwt(l_password)
-                .map_err(|err| WartIDError::InvalidCredentials(err))?;
+        if let Some(discord_agent) = discord_agent.filter(|_| l_username.is_empty()) {
+            let claims = discord_agent
+                .try_authorize(l_password)
+                .map_err(|err| WartIDError::InvalidCredentials(err.to_string()))?;
 
-            return User::find_or_create_by_discord_id(db, l_discord_id, l_discord_name).map(Some);
+            return User::find_or_create_by_discord_id(db, claims.sub, claims.name).map(Some);
         }
 
         match users
             .filter(username.eq(l_username))
             .first::<User>(db)
-            .extract_not_found()
+            .optional()
+            .map_err(Into::into)
         {
             Ok(Some(user)) => {
                 if let Some(db_password) = &user.password {
-                    if bcrypt::verify(l_password, &db_password).expect("bcrypt cannot verify") {
+                    if bcrypt::verify(l_password, db_password).expect("bcrypt cannot verify") {
                         return Ok(Some(user));
                     }
                 }
@@ -174,60 +173,10 @@ impl User {
 }
 
 #[derive(Insertable)]
-#[table_name = "users"]
+#[diesel(table_name = users)]
 struct NewUser {
     pub username: String,
     pub password: Option<String>,
     pub email: Option<String>,
     pub discord_id: Option<i64>,
-}
-
-#[cfg(feature = "discord_bot")]
-mod discord_login {
-    use jsonwebtoken::{DecodingKey, TokenData, Validation};
-
-    lazy_static::lazy_static! {
-        static ref KEY: DecodingKey<'static> = {
-            use rand::Rng;
-
-            let gen: &'static _ = Box::<[u8; 32]>::leak(Box::new(rand::rngs::OsRng.gen()));
-
-            std::fs::write(crate::CONFIG.discord_key_file, gen).expect("cannot write key file");
-
-            DecodingKey::from_secret(gen)
-        };
-    }
-
-    pub fn init() {
-        &*KEY;
-    }
-
-    pub fn destroy() {
-        std::fs::remove_file(crate::CONFIG.discord_key_file).expect("cannot remove key file");
-        println!("Removed discord bot JWT key file");
-        std::process::exit(0)
-    }
-
-    #[derive(serde::Deserialize, serde::Serialize)]
-    struct Claims {
-        exp: i64,
-
-        /// Subject (Discord user ID)
-        sub: u64,
-
-        name: String,
-    }
-
-    pub fn verify_jwt(token: &str) -> Result<(u64, String), String> {
-        jsonwebtoken::decode(
-            token,
-            &*KEY,
-            &Validation {
-                validate_exp: true,
-                ..Default::default()
-            },
-        )
-        .map_err(|err| err.to_string())
-        .map(|data: TokenData<Claims>| (data.claims.sub, data.claims.name))
-    }
 }

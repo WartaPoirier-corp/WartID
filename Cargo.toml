@@ -1,5 +1,5 @@
 [workspace]
+resolver = "2"
 members = [
     "wartid-server",
-    "wartid-server-discord-bot",
 ]

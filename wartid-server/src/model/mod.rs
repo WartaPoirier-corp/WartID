@@ -9,6 +9,8 @@ pub use scopes::*;
 pub use session::*;
 pub use user::*;
 
+pub use crate::db_await;
+
 mod app;
 mod oauth2session;
 mod page_context;
@@ -18,51 +20,27 @@ mod user;
 
 pub type WartIDResult<T> = Result<T, WartIDError>;
 
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 pub enum WartIDError {
+    #[error("oauth2 error: {0}")]
     OAuth2Error(&'static str),
 
+    #[error("database connection error")]
     DatabaseConnection,
 
-    Database(diesel::result::Error),
+    #[error("database error: {0}")]
+    Database(#[from] Error),
 
+    #[error("invalid credentials: {0}")]
     InvalidCredentials(String),
 
+    #[error("invalid form fields: {0}")]
     InvalidForm(String),
 
-    Any(Box<dyn std::error::Error>),
+    #[error(transparent)]
+    Any(#[from] Box<dyn std::error::Error + Send + 'static>),
 
+    #[error("TODO")]
     #[deprecated]
     Todo,
-}
-
-impl From<diesel::result::Error> for WartIDError {
-    fn from(e: Error) -> Self {
-        WartIDError::Database(e)
-    }
-}
-
-macro_rules! ext_impl {
-    ($(for <$($ctx:tt),*>)? fn <$base:ty>.$name:ident($($params:tt)*) $(-> $ret:ty)? {$($r:tt)*}) => {
-    #[allow(non_camel_case_types)]
-    pub trait $name {
-        type Ret = ();
-        fn $name($($params)*) -> Self::Ret;
-    }
-
-    impl$(<$($ctx),*>)? $name for $base {
-        $(type Ret = $ret;)?
-        fn $name ($($params)*) -> Self::Ret {$($r)*}
-    }
-    };
-}
-
-ext_impl! {
-for <T> fn <diesel::QueryResult<T>>.extract_not_found(self) -> WartIDResult<Option<T>> {
-    match self {
-        Ok(ok) => Ok(Some(ok)),
-        Err(diesel::NotFound) => Ok(None),
-        Err(err) => Err(WartIDError::Database(err)),
-    }
-}
 }

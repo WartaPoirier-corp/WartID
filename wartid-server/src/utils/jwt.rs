@@ -1,6 +1,6 @@
 use std::marker::PhantomData;
 
-use chrono::{DateTime, Duration, Utc};
+use chrono::{DateTime, Duration, TimeZone, Utc};
 use jsonwebtoken::*;
 use serde::{de::DeserializeOwned, Serialize};
 
@@ -15,10 +15,15 @@ fn now() -> DateTime<Utc> {
     return unsafe { TEST_NOW };
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, thiserror::Error)]
 pub enum JWTValidationError {
+    #[error("invalid jwt signature")]
     InvalidSignature,
+
+    #[error("invalid jwt 'aud'")]
     InvalidAudience,
+
+    #[error("expired jwt")]
     Expired,
 }
 
@@ -45,7 +50,7 @@ pub struct JWT<ClaimsIn, ClaimsOut> {
     duration: Duration,
 
     key_enc: EncodingKey,
-    key_dec: DecodingKey<'static>,
+    key_dec: DecodingKey,
 
     _phantom: PhantomData<(ClaimsIn, ClaimsOut)>,
 }
@@ -62,7 +67,7 @@ impl<'de, ClaimsIn: Serialize + 'static, ClaimsOut: DeserializeOwned + 'static>
             issuer,
             duration,
             key_enc: EncodingKey::from_secret(&gen[..]),
-            key_dec: DecodingKey::from_secret(&gen[..]).into_static(),
+            key_dec: DecodingKey::from_secret(&gen[..]),
             _phantom: PhantomData,
         }
     }
@@ -84,16 +89,14 @@ impl<'de, ClaimsIn: Serialize + 'static, ClaimsOut: DeserializeOwned + 'static>
     }
 
     pub fn decode(&self, token: &str) -> Result<ClaimsOut, JWTValidationError> {
-        let data = jsonwebtoken::decode(
-            token,
-            &self.key_dec,
-            &Validation {
-                validate_exp: false,
-                ..Validation::default()
-            },
-        )
-        .map_err(|e| {
-            println!("{:?}", e);
+        let validation = &{
+            let mut v = Validation::default();
+            v.validate_exp = false;
+            v
+        };
+
+        let data = jsonwebtoken::decode(token, &self.key_dec, validation).map_err(|e| {
+            log::error!("jwt decode error: {e}");
             JWTValidationError::InvalidSignature
         })?;
 
@@ -117,7 +120,7 @@ mod tests {
 
     /// Sets the faked time as minutes from an arbitrary reference point
     fn set_time(minutes: i64) {
-        unsafe { TEST_NOW = chrono::MIN_DATETIME + Duration::minutes(minutes) }
+        unsafe { TEST_NOW = Utc.timestamp_nanos(0) + Duration::minutes(minutes) }
     }
 
     #[derive(serde::Deserialize, serde::Serialize)]

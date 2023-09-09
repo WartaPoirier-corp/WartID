@@ -1,0 +1,6 @@
+[default]
+limits.forms = 10000000
+databases.wartid.url = "postgres://wartid:dev@localhost/wartid_dev"
+base_url = "http://localhost:8000/"
+# discord.token = "..."
+discord.allowed_guilds = []

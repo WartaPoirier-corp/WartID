@@ -6,7 +6,7 @@ pub mod users;
 mod prelude {
     pub use std::borrow::Cow;
 
-    pub use rocket::request::Form;
+    pub use rocket::form::Form;
     pub use rocket::response::Redirect;
     pub use uuid::Uuid;
 

@@ -2,11 +2,12 @@ use chrono::{Duration, NaiveDateTime, Utc};
 use diesel::{BoolExpressionMethods, ExpressionMethods, QueryDsl, RunQueryDsl};
 use uuid::Uuid;
 
+use crate::id::Id;
 use crate::schema::sessions;
 
 use super::*;
 
-crate::def_id!(pub struct SessionId);
+pub type SessionId = Id<Session>;
 
 #[derive(Debug, Queryable)]
 pub struct Session {
@@ -38,7 +39,7 @@ impl Session {
 }
 
 #[derive(Insertable)]
-#[table_name = "sessions"]
+#[diesel(table_name = sessions)]
 pub struct NewSession {
     pub users_id: UserId,
     pub expiration: NaiveDateTime,

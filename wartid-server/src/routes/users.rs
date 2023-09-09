@@ -1,29 +1,27 @@
-use rocket::http::RawStr;
-use rocket::request::{FormItems, FormParseError, FromForm, FromParam};
-use uuid::Error;
+use rocket::form::error::ErrorKind;
+use rocket::form::{DataField, FromForm, Options, ValueField};
+use rocket::request::FromParam;
+use uuid::Error as UuidError;
 
 use super::prelude::*;
 
 pub struct UuidParamWithAt(UserId);
 
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 pub enum UuidParamWithAtError {
+    #[error("missing '@' prefix")]
     NoAtSymbol,
-    Uuid(uuid::Error),
-}
 
-impl From<uuid::Error> for UuidParamWithAtError {
-    fn from(e: Error) -> Self {
-        Self::Uuid(e)
-    }
+    #[error(transparent)]
+    Uuid(#[from] UuidError),
 }
 
 impl<'a> FromParam<'a> for UuidParamWithAt {
     type Error = UuidParamWithAtError;
 
-    fn from_param(param: &'a RawStr) -> Result<Self, Self::Error> {
+    fn from_param(param: &'a str) -> Result<Self, Self::Error> {
         if let Some(param) = param.strip_prefix('@') {
-            Ok(UuidParamWithAt(UserId::from_param(param.into())?))
+            Ok(UuidParamWithAt(UserId::from_param(param)?))
         } else {
             Err(UuidParamWithAtError::NoAtSymbol)
         }
@@ -36,7 +34,7 @@ pub fn view_me(session: &LoginSession) -> Redirect {
 }
 
 #[get("/<user_id>")]
-pub fn view(
+pub async fn view(
     ctx: PageContext,
     session: &LoginSession,
     db: DbConn,
@@ -44,17 +42,17 @@ pub fn view(
 ) -> WartIDResult<Option<Ructe>> {
     let user_id = user_id.0;
 
-    let user = match User::find_by_id(&*db, user_id) {
+    let user = match db_await!(User::find_by_id(db, user_id)) {
         Ok(Some(user)) => user,
         Ok(None) => return Ok(None),
         Err(err) => return Err(err),
     };
 
-    return Ok(Some(render!(panel::user_view(
+    Ok(Some(render!(panel::user_view_html(
         &ctx;
         &user,
         session.user.id == user_id
-    ))));
+    ))))
 }
 
 #[derive(Debug)]
@@ -64,57 +62,75 @@ pub enum FormUpdateIntent {
     UpdatePassword(String),
 }
 
-impl<'a> FromForm<'a> for FormUpdateIntent {
-    type Error = FormParseError<'a>;
+#[derive(FromForm)]
+pub struct FormUpdateIntentRaw {
+    name: Option<String>,
+    email: Option<String>,
+    password: Option<String>,
 
-    fn from_form(it: &mut FormItems<'a>, strict: bool) -> Result<Self, Self::Error> {
-        #[derive(FromForm)]
-        struct FormUpdateIntentRaw<'a> {
-            name: Option<String>,
-            email: Option<String>,
-            password: Option<String>,
+    // Buttons (mutually exclusive)
+    #[field(name = "update-name", default = false)]
+    update_name: bool,
+    #[field(name = "update-email", default = false)]
+    update_email: bool,
+    #[field(name = "update-password", default = false)]
+    oauth_password: bool,
+}
 
-            // Buttons (mutually exclusive)
-            #[form(field = "update-name")]
-            update_name: Option<&'a RawStr>,
-            #[form(field = "update-email")]
-            update_email: Option<&'a RawStr>,
-            #[form(field = "update-password")]
-            oauth_password: Option<&'a RawStr>,
-        }
+#[rocket::async_trait]
+impl<'r> FromForm<'r> for FormUpdateIntent {
+    type Context = <FormUpdateIntentRaw as FromForm<'r>>::Context;
 
-        Ok(match FormUpdateIntentRaw::from_form(it, strict)? {
+    fn init(opts: Options) -> Self::Context {
+        FormUpdateIntentRaw::init(opts)
+    }
+
+    fn push_value(ctxt: &mut Self::Context, field: ValueField<'r>) {
+        FormUpdateIntentRaw::push_value(ctxt, field);
+    }
+
+    #[must_use]
+    async fn push_data(ctxt: &mut Self::Context, field: DataField<'r, '_>) {
+        FormUpdateIntentRaw::push_data(ctxt, field).await;
+    }
+
+    fn push_error(ctxt: &mut Self::Context, error: rocket::form::Error<'r>) {
+        FormUpdateIntentRaw::push_error(ctxt, error);
+    }
+
+    fn finalize(ctxt: Self::Context) -> rocket::form::Result<'r, Self> {
+        Ok(match FormUpdateIntentRaw::finalize(ctxt)? {
             FormUpdateIntentRaw {
                 name: Some(name),
                 email: None,
                 password: None,
-                update_name: Some(_),
-                update_email: None,
-                oauth_password: None,
+                update_name: true,
+                update_email: false,
+                oauth_password: false,
             } => FormUpdateIntent::UpdateName(name),
             FormUpdateIntentRaw {
                 name: None,
                 email: Some(email),
                 password: None,
-                update_name: None,
-                update_email: Some(_),
-                oauth_password: None,
+                update_name: false,
+                update_email: true,
+                oauth_password: false,
             } => FormUpdateIntent::UpdateEmail(email),
             FormUpdateIntentRaw {
                 name: None,
                 email: None,
                 password: Some(password),
-                update_name: None,
-                update_email: None,
-                oauth_password: Some(_),
+                update_name: false,
+                update_email: false,
+                oauth_password: true,
             } => FormUpdateIntent::UpdatePassword(password),
-            _ => Err(FormParseError::Unknown("?".into(), "?".into()))?,
+            _ => Err(ErrorKind::Duplicate)?,
         })
     }
 }
 
 #[post("/<user_id>", data = "<data>")]
-pub fn view_update(
+pub async fn view_update(
     mut ctx: PageContext,
     session: &LoginSession,
     db: DbConn,
@@ -136,11 +152,11 @@ pub fn view_update(
                     Cow::Borrowed("Le nom doit faire minimum 3 caractères."),
                     true,
                 );
-                return Ok(render!(panel::user_view(&ctx; &session.user, true)));
+                return Ok(render!(panel::user_view_html(&ctx; &session.user, true)));
             };
 
             (
-                User::update_username(&db, user_id, &name)?,
+                db_await!(User::update_username(db, user_id, &name))?,
                 "Nom mis à jour avec succès !",
             )
         }
@@ -151,11 +167,11 @@ pub fn view_update(
                     Cow::Borrowed("Merci de rentrer une adresse e-mail valide."),
                     true,
                 );
-                return Ok(render!(panel::user_view(&ctx; &session.user, true)));
+                return Ok(render!(panel::user_view_html(&ctx; &session.user, true)));
             };
 
             (
-                User::update_email(&db, user_id, &email)?,
+                db_await!(User::update_email(db, user_id, &email))?,
                 "Adresse e-mail mise à jour avec succès !",
             )
         }
@@ -165,11 +181,11 @@ pub fn view_update(
                     Cow::Borrowed("Le mot de passe doit faire minimum 8 caractères."),
                     true,
                 );
-                return Ok(render!(panel::user_view(&ctx; &session.user, true)));
+                return Ok(render!(panel::user_view_html(&ctx; &session.user, true)));
             };
 
             (
-                User::update_password(&db, user_id, &password)?,
+                db_await!(User::update_password(db, user_id, &password))?,
                 "Mot de passe mis à jour avec succès !",
             )
         }
@@ -177,5 +193,5 @@ pub fn view_update(
 
     ctx.add_flash_message(Cow::Borrowed(success_message), false);
 
-    return Ok(render!(panel::user_view(&ctx; &user, true)));
+    Ok(render!(panel::user_view_html(&ctx; &user, true)))
 }

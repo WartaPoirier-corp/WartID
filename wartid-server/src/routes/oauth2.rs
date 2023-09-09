@@ -1,21 +1,23 @@
 use std::borrow::Cow;
 
+use crate::config::Config;
+use rocket::form::error::ErrorKind;
+use rocket::form::{FromFormField, ValueField};
 use rocket::http::uri::Origin;
-use rocket::http::{RawStr, Status};
-use rocket::request::{FormParseError, FromFormValue, FromRequest};
-use rocket::request::{FromForm, Outcome};
-use rocket::Request;
-use rocket_contrib::json::Json;
+use rocket::http::Status;
+use rocket::outcome::{try_outcome, IntoOutcome};
+use rocket::request::FromRequest;
+use rocket::request::Outcome;
+use rocket::serde::json::Json;
+use rocket::{Request, State};
 
 use crate::utils::jwt::JWT;
 
 use super::prelude::*;
 
-impl<'v> FromFormValue<'v> for OAuth2Scopes {
-    type Error = ();
-
-    fn from_form_value(form_value: &'v RawStr) -> Result<Self, Self::Error> {
-        form_value.percent_decode().unwrap_or_default().parse()
+impl<'r> FromFormField<'r> for OAuth2Scopes {
+    fn from_value(field: ValueField<'r>) -> rocket::form::Result<'r, Self> {
+        field.value.parse().map_err(|()| ErrorKind::Unknown.into())
     }
 }
 
@@ -53,20 +55,10 @@ lazy_static::lazy_static! {
     static ref JWT_ACCESS: JWT<AccessState, AccessState> = JWT::new("wartid-access-token", *ACCESS_TOKEN_EXPIRATION);
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, rocket::FromFormField)]
 pub enum AuthorizeResponseType {
+    #[field(value = "code")]
     Code,
-}
-
-impl<'v> FromFormValue<'v> for AuthorizeResponseType {
-    type Error = ();
-
-    fn from_form_value(form_value: &'v RawStr) -> Result<Self, Self::Error> {
-        match form_value.as_str() {
-            "code" => Ok(Self::Code),
-            _ => Err(()),
-        }
-    }
 }
 
 #[derive(FromForm, Debug)]
@@ -76,7 +68,7 @@ pub struct AuthorizeQuery<'a> {
     scope: Option<OAuth2Scopes>,
     response_type: AuthorizeResponseType,
     state: Option<String>,
-    nonce: Option<&'a RawStr>,
+    nonce: Option<&'a str>,
 }
 
 macro_rules! implies {
@@ -85,25 +77,17 @@ macro_rules! implies {
     };
 }
 
-#[cfg(test)]
-#[test]
-fn implies_test() {
-    assert!(implies!(true => true));
-    assert!(!implies!(true => false));
-    assert!(implies!(false => true));
-    assert!(implies!(false => false));
-}
-
 #[get("/oauth2/authorize?<authorize..>")]
-pub fn authorize(
-    current_uri: &Origin,
+pub async fn authorize(
+    config: &State<Config>,
+    current_uri: &Origin<'_>,
     session: Option<&LoginSession>,
     db: DbConn,
-    authorize: Result<Form<AuthorizeQuery>, FormParseError>,
+    authorize: Result<AuthorizeQuery<'_>, rocket::form::error::Errors<'_>>,
 ) -> WartIDResult<Result<Ructe, Redirect>> {
     match authorize {
         Ok(authorize) => Ok({
-            let authorize = authorize.into_inner();
+            //let authorize = authorize.into_inner();
 
             if authorize.response_type != AuthorizeResponseType::Code {
                 /* FIXME Even though this code is literally unreachable, implement correctly in case
@@ -114,7 +98,8 @@ pub fn authorize(
             if let Some(session) = session {
                 let redirect_uri = &authorize.redirect_uri;
 
-                let app = UserApp::find_by_id(&db, authorize.client_id)?
+                let authorize_client_id = authorize.client_id;
+                let app = db_await!(UserApp::find_by_id(db, authorize_client_id))?
                     .filter(|app| app.oauth2().is_some())
                     .ok_or(WartIDError::OAuth2Error("client not found"))?;
 
@@ -125,8 +110,7 @@ pub fn authorize(
                 let redirect_uri_short = redirect_uri
                     .split_once("//")
                     .and_then(|(_, right)| right.split_once('/'))
-                    .map(|(left, _)| left)
-                    .unwrap_or(redirect_uri.as_str());
+                    .map_or(redirect_uri.as_str(), |(left, _)| left);
 
                 let scopes = authorize.scope.unwrap_or_default();
 
@@ -145,7 +129,7 @@ pub fn authorize(
 
                 // TODO X-Frame-Options: Deny
 
-                Ok(render!(oauth2::authorize(
+                Ok(render!(oauth2::authorize_html(
                     &session.user,
                     &app,
                     redirect_uri_short,
@@ -155,42 +139,33 @@ pub fn authorize(
                     &scopes
                 )))
             } else {
-                let uri = format!("{}{}", crate::CONFIG.http_base_url, current_uri.to_string());
-                Err(Redirect::to(uri!(crate::login: uri)))
+                let uri = format!("{}{}", config.base_url, current_uri);
+                Err(Redirect::to(uri!(crate::login(Some(uri)))))
             }
         }),
-        Err(e) => Err(WartIDError::Todo),
+        Err(err) => Err(WartIDError::InvalidForm(format!("{err:?}"))),
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, rocket::FromFormField)]
 enum GrantType {
+    #[field(value = "authorization_code")]
     AuthorizationCode,
+
+    #[field(value = "refresh_token")]
     RefreshToken,
-}
-
-impl<'v> FromFormValue<'v> for GrantType {
-    type Error = ();
-
-    fn from_form_value(form_value: &'v RawStr) -> Result<Self, Self::Error> {
-        match form_value.as_str() {
-            "authorization_code" => Ok(Self::AuthorizationCode),
-            "refresh_token" => Ok(Self::RefreshToken),
-            _ => Err(()),
-        }
-    }
 }
 
 #[derive(FromForm, Debug)]
 pub struct TokenQuery<'a> {
     grant_type: GrantType,
-    code: Option<&'a RawStr>,
-    refresh_token: Option<&'a RawStr>,
-    redirect_uri: &'a RawStr,
-    scope: Option<&'a RawStr>,
+    code: Option<&'a str>,
+    refresh_token: Option<String>,
+    redirect_uri: &'a str,
+    scope: Option<&'a str>,
 
-    client_id: Option<&'a RawStr>,
-    client_secret: Option<&'a RawStr>,
+    client_id: Option<&'a str>,
+    client_secret: Option<&'a str>,
 }
 
 /// Other auth methods: https://darutk.medium.com/oauth-2-0-client-authentication-4b5f929305d4
@@ -200,36 +175,29 @@ pub struct BasicAuthorization {
     password: String,
 }
 
-impl<'a, 'r> FromRequest<'a, 'r> for BasicAuthorization {
+#[rocket::async_trait]
+impl<'r> FromRequest<'r> for BasicAuthorization {
     type Error = String;
 
-    fn from_request(request: &'a Request<'r>) -> Outcome<Self, Self::Error> {
-        let auth = match request.headers().get("Authorization").next() {
-            Some(auth) => auth,
-            None => {
-                return Outcome::Failure((
-                    Status::Forbidden,
-                    String::from("No Authorization header"),
-                ));
-            }
+    async fn from_request(request: &'r Request<'_>) -> Outcome<Self, Self::Error> {
+        let Some(auth) = request.headers().get("Authorization").next() else {
+            return Outcome::Failure((Status::Forbidden, String::from("No Authorization header")));
         };
 
-        let auth = auth.strip_prefix("Basic ").ok_or_else(|| {
-            Err((
-                Status::BadRequest,
-                String::from("Only basic auth is supported"),
-            ))
-        })?;
+        let auth = try_outcome!(auth
+            .strip_prefix("Basic ")
+            .ok_or_else(|| String::from("Only basic auth is supported"))
+            .into_outcome(Status::BadRequest));
 
         let auth = base64::decode(auth).map_err(|e| e.to_string()).unwrap(); // FIXME
         let auth = std::str::from_utf8(&auth)
             .map_err(|e| e.to_string())
             .unwrap(); // FIXME
 
-        let (username, password) = auth.split_once(':').ok_or(Err((
-            Status::BadRequest,
-            String::from("Bad format, missing colon"),
-        )))?;
+        let (username, password) = try_outcome!(auth
+            .split_once(':')
+            .ok_or(String::from("Bad format, missing colon"))
+            .into_outcome(Status::BadRequest));
 
         Outcome::Success(BasicAuthorization {
             username: String::from(username),
@@ -271,30 +239,31 @@ pub struct BearerSession {
     scopes: OAuth2Scopes,
 }
 
-impl<'a, 'r> FromRequest<'a, 'r> for BearerSession {
+#[rocket::async_trait]
+impl<'r> FromRequest<'r> for BearerSession {
     type Error = &'static str;
 
-    fn from_request(request: &'a Request<'r>) -> Outcome<Self, Self::Error> {
-        let bearer = request
+    async fn from_request(request: &'r Request<'_>) -> Outcome<Self, Self::Error> {
+        let bearer = try_outcome!(request
             .headers()
             .get_one("Authorization")
             .and_then(|h| h.strip_prefix("Bearer "))
-            .ok_or(Err((
-                Status::BadRequest,
-                "missing bearer authentication header",
-            )))?;
+            .ok_or("missing bearer authentication header")
+            .into_outcome(Status::BadRequest));
 
-        let database: crate::DbConn = request.guard().unwrap();
+        let db: crate::DbConn = request.guard().await.unwrap();
 
-        let token_access = JWT_ACCESS
+        let token_access = try_outcome!(JWT_ACCESS
             .decode(bearer)
-            .map_err(|_| Err((Status::Unauthorized, "cannot validate access token")))?;
-        let user = User::find_by_id(&database, token_access.user)
-            .map_err(|_| Err((Status::InternalServerError, "database error")))?;
-        let user = user.ok_or(Err((
-            Status::InternalServerError,
-            "authentication successful but user not in database",
-        )))?;
+            .map_err(|_| "cannot validate access token")
+            .into_outcome(Status::Unauthorized));
+        let token_access_user = token_access.user;
+        let user = try_outcome!(db_await!(User::find_by_id(db, token_access_user))
+            .map_err(|_| "database error")
+            .into_outcome(Status::InternalServerError));
+        let user = try_outcome!(user
+            .ok_or("authentication successful but user not in database")
+            .into_outcome(Status::InternalServerError));
 
         Outcome::Success(BearerSession {
             user,
@@ -304,36 +273,39 @@ impl<'a, 'r> FromRequest<'a, 'r> for BearerSession {
 }
 
 #[post("/oauth2/token", data = "<data>")]
-pub fn token(
+pub async fn token(
     db: DbConn,
     auth: Option<BasicAuthorization>,
-    data: Form<TokenQuery>,
+    data: Form<TokenQuery<'_>>,
 ) -> Result<Json<TokenResponse>, String> {
     let (client_id, client_password) = match (auth, data.client_id, data.client_secret) {
         (Some(auth), None, None) => (auth.username.parse(), Cow::Owned(auth.password)),
         (None, Some(client_id), Some(client_password)) => {
-            (client_id.parse(), Cow::Borrowed(client_password.as_str()))
+            (client_id.parse(), Cow::Borrowed(client_password))
         }
         _ => return Err(String::from("multiple auth methods used simultaneously")),
     };
 
     let client_id = client_id.map_err(|_| String::from("cannot parse client uuid"))?;
 
-    let app = match UserApp::find_by_id(&db, client_id) {
+    let app = match db_await!(UserApp::find_by_id(db, client_id)) {
         Ok(Some(app)) => app,
         Ok(None) => return Err(String::from("unknown client id")),
-        Err(e) => return Err(format!("{:?}", e)),
+        Err(e) => return Err(format!("{e}")),
     };
 
     if Some(client_password.as_ref()) != app.oauth2().map(|(secret, _)| secret) {
         return Err(String::from("invalid client secret"));
     }
 
-    let (user, scopes) = match (data.grant_type, data.code, data.refresh_token) {
+    let (user, scopes) = match {
+        let TokenQuery { grant_type, code, refresh_token, .. } = data.into_inner();
+        (grant_type, code, refresh_token)
+    } {
         (GrantType::AuthorizationCode, Some(code), None) => {
             let authorize = JWT_AUTHORIZE
                 .decode(code)
-                .map_err(|e| format!("invalid code, might have expired: {:?}", e))?; // TODO
+                .map_err(|e| format!("invalid code, might have expired: {e}"))?; // TODO
 
             if authorize.client != app.id {
                 return Err(String::from("invalid client"));
@@ -344,7 +316,7 @@ pub fn token(
             (authorize.user, authorize.initial_scopes)
         }
         (GrantType::RefreshToken, None, Some(refresh_token)) => {
-            let session = OAuth2Session::find_by_token(&db, refresh_token.as_str()).map_err(|e| format!("{:?}", e))?;
+            let session = db_await!(OAuth2Session::find_by_token(db, &refresh_token)).map_err(|e| format!("{e}"))?;
 
             match session {
                 Some(session) => {
@@ -360,13 +332,15 @@ pub fn token(
         _ => return Err(String::from("authorization_code grant type can only be used with ?code, and refresh_token grant type can only be used with ?refresh_token")),
     };
 
-    let refresh_token = match OAuth2Session::insert_or_refresh(&db, user, app.id, &scopes) {
-        Ok(refresh_token) => Some(refresh_token),
-        Err(e) => {
-            log::error!("couldn't insert refresh token: {:?}", e);
-            None
-        }
-    };
+    let scopes2 = scopes.clone();
+    let refresh_token =
+        match db_await!(OAuth2Session::insert_or_refresh(db, user, app.id, &scopes2)) {
+            Ok(refresh_token) => Some(refresh_token),
+            Err(e) => {
+                log::error!("couldn't insert refresh token: {:?}", e);
+                None
+            }
+        };
 
     let access_token = JWT_ACCESS.encode(AccessState {
         user,
@@ -395,7 +369,7 @@ pub struct UserInfo {
 pub fn userinfo(session: BearerSession) -> Json<UserInfo> {
     let BearerSession { user, scopes } = session;
 
-    println!("scopes: {:?}", scopes);
+    log::info!("scopes: {scopes:?}");
 
     Json(UserInfo {
         sub: user.id,

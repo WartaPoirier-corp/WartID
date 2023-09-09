@@ -1,33 +1,33 @@
-use std::env;
-#[cfg(feature = "discord_bot")]
-use std::path::{Path, PathBuf};
+use serde::Deserialize;
+use std::sync::Arc;
 
-#[derive(Debug)]
+#[derive(Debug, Deserialize)]
 pub struct Config {
-    pub http_base_url: &'static str,
+    #[serde(deserialize_with = "deserialize_base_url")]
+    pub base_url: String,
 
-    #[cfg(feature = "discord_bot")]
-    pub discord_key_file: &'static Path,
+    pub discord: Option<DiscordConfig>,
 }
 
-impl Config {
-    pub fn load() -> Self {
-        Self {
-            http_base_url: {
-                let mut var = env::var("HTTP_BASE_URL").expect("no HTTP_BASE_URL set");
-                if !var.ends_with('/') {
-                    var.push('/')
-                }
-                Box::leak(var.into_boxed_str())
-            },
-            #[cfg(feature = "discord_bot")]
-            discord_key_file: {
-                let path: PathBuf = env::var("DISCORD_KEY_FILE")
-                    .expect("no DISCORD_KEY_FILE set")
-                    .into();
+#[derive(Debug, Deserialize)]
+pub struct DiscordConfig {
+    pub token: String,
 
-                Box::leak(path.into_boxed_path())
-            },
-        }
+    pub allowed_guilds: Arc<[u64]>,
+}
+
+fn deserialize_base_url<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<String, D::Error> {
+    use serde::de::{Error, Unexpected};
+
+    let url = String::deserialize(deserializer)?;
+    if url.ends_with('/') {
+        Ok(url)
+    } else {
+        Err(Error::invalid_value(
+            Unexpected::Str(&url),
+            &"a URL with a trailing slash",
+        ))
     }
 }
