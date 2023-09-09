@@ -1,6 +1,6 @@
 use std::marker::PhantomData;
 
-use chrono::{DateTime, Duration, Utc};
+use chrono::{DateTime, Duration, TimeZone, Utc};
 use jsonwebtoken::*;
 use serde::{de::DeserializeOwned, Serialize};
 
@@ -120,7 +120,7 @@ mod tests {
 
     /// Sets the faked time as minutes from an arbitrary reference point
     fn set_time(minutes: i64) {
-        unsafe { TEST_NOW = chrono::MIN_DATETIME + Duration::minutes(minutes) }
+        unsafe { TEST_NOW = Utc.timestamp_nanos(0) + Duration::minutes(minutes) }
     }
 
     #[derive(serde::Deserialize, serde::Serialize)]
